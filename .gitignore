@@ -32,3 +32,6 @@ data/
 mlruns/
 mlflow.db
 mlflow-artifacts/
+
+# Artefacts du modèle (publiés sur le Hub HF, voir docs/artefacts.md)
+artifacts/
