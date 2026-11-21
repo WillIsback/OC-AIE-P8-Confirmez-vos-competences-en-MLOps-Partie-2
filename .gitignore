@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+.venv
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+coverage.xml
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Artefacts générés
+reports/
+
+# Outillage local
+.codegraph/
+
+# OpenClassrooms : sources PDF, état, carnet et exercices (jamais versionnés)
+.oc/
+exercices/
+
+# Données et artefacts lourds du modèle (reconstruits ou téléchargés)
+data/
+mlruns/
+mlflow.db
+mlflow-artifacts/
