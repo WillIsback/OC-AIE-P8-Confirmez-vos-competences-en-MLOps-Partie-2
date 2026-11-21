@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Rapport de sécurité
+    url: https://github.com/WillIsback/OC-AIE-P8-Confirmez-vos-competences-en-MLOps-Partie-2/security/advisories/new
+    about: Signalez une vulnérabilité via GitHub Security Advisories (pas d'issue publique)

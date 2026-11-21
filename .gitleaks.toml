@@ -1,0 +1,9 @@
+# Configuration Gitleaks : règles par défaut + exclusions justifiées.
+title = "Confirmez vos compétences en MLOps (Partie 2/2)"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Lockfiles générés"
+paths = ['''uv\.lock''']
