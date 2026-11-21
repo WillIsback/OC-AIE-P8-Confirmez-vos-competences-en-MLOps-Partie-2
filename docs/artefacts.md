@@ -27,7 +27,8 @@ flowchart LR
    écrit les artefacts, puis recharge le modèle avec `credit_scoring.model` et compare ses
    scores à ceux de P6 sur tout le jeu de test. Résultat de l'export du 22/11/2026 :
    **écart maximal 0,0 sur 48 744 clients, décisions identiques**.
-2. **Publication** sur un dépôt modèle du Hub ; le SHA du commit est écrit dans
+2. **Publication** sur un dépôt modèle **privé** du Hub (l'échantillon provient des données
+   Kaggle, non redistribuables ; accès par `HF_TOKEN`) ; le SHA du commit est écrit dans
    `model_revision.txt`, versionné avec le code.
 3. **Téléchargement** à cette révision exacte, jamais `main` : un même commit du code
    sert toujours les mêmes octets du modèle. Le chargement refuse tout fichier absent ou
