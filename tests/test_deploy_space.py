@@ -203,3 +203,25 @@ def test_secrets_du_space(monkeypatch: pytest.MonkeyPatch) -> None:
     for key, value in {"API_KEY": "k", "SPACE_HF_TOKEN": "t", "DATABASE_URL": "pg"}.items():
         monkeypatch.setenv(key, value)
     assert ds.space_secrets() == {"API_KEY": "k", "HF_TOKEN": "t", "DATABASE_URL": "pg"}
+
+
+def test_reponse_non_json_comptee_comme_essai_rate(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Juste après RUNNING, le proxy du Space peut servir une page HTML (#42).
+    import io
+    import urllib.request
+
+    class Html(io.BytesIO):
+        status = 200
+
+        def __enter__(self) -> Html:
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+    monkeypatch.setattr(urllib.request, "urlopen", lambda *a, **k: Html(b"<html>erreur</html>"))
+    status, body = ds._urllib_fetch("GET", "https://x.hf.space/health", {}, None)
+    assert status == 200
+    assert body == {"_non_json": "<html>erreur</html>"}
+    with pytest.raises(RuntimeError, match="version attendue"):
+        ds.smoke("https://x.hf.space", "k", "v0.3.1")

@@ -186,9 +186,19 @@ def _urllib_fetch(
     request = urllib.request.Request(url, data=body, headers=headers, method=method)  # noqa: S310
     try:
         with urllib.request.urlopen(request, timeout=30) as response:  # noqa: S310
-            return response.status, json.loads(response.read() or b"{}")
+            return response.status, _json_or_raw(response.read())
     except urllib.error.HTTPError as exc:
-        return exc.code, json.loads(exc.read() or b"{}")
+        return exc.code, _json_or_raw(exc.read())
+
+
+def _json_or_raw(body: bytes) -> dict[str, Any]:
+    """Corps JSON, ou début du texte : juste après RUNNING, le proxy du Space peut servir
+    une page HTML d'attente ou d'erreur ; l'essai échoue alors proprement et sera rejoué."""
+    try:
+        parsed = json.loads(body or b"{}")
+    except ValueError:
+        return {"_non_json": body[:200].decode("utf-8", "replace")}
+    return parsed if isinstance(parsed, dict) else {"_json": parsed}
 
 
 def smoke_payload() -> bytes:

@@ -66,3 +66,22 @@ def test_gradio_casse_n_est_pas_masque(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(builtins, "__import__", broken)
     with pytest.raises(ImportError):
         install_home(FastAPI())
+
+
+def test_pas_de_serveur_node_meme_si_le_space_active_le_ssr(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Sur un Space, GRADIO_SSR_MODE=true : un serveur Node lancé au montage prendrait le
+    # port 7860 avant uvicorn (Errno 98, #42).
+    import gradio.routes
+
+    from credit_scoring.ui import mount_ui
+    from credit_scoring.ui.app import MOUNT_OPTIONS
+
+    def interdit(*args: object, **kwargs: object) -> object:
+        raise AssertionError("serveur Node SSR démarré")
+
+    monkeypatch.setenv("GRADIO_SSR_MODE", "true")
+    monkeypatch.setattr(gradio.routes, "start_node_server", interdit)
+    assert MOUNT_OPTIONS.get("ssr_mode") is False
+    mount_ui(FastAPI())
