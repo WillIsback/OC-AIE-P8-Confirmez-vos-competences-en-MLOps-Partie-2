@@ -61,7 +61,10 @@ class ClientFeatures(GeneratedFeatures):
     DAYS_REGISTRATION: float = Field(ge=0, description="ancienneté de l'enregistrement, en années")
     OWN_CAR_AGE: float = Field(ge=0, description="âge du véhicule, en années")
 
-    # HOUR_APPR_PROCESS_START : règle à écrire par William (#12, part 👤).
+    # HOUR_APPR_PROCESS_START : « heure de dépôt de la demande, 0 à 23 »
+    HOUR_APPR_PROCESS_START: int = Field(
+        ge=0, le=23, description="heure de dépôt de la demande, 0 à 23"
+    )
 
 
 class FeatureWarning(BaseModel):

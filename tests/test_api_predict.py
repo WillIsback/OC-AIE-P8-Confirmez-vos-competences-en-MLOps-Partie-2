@@ -157,6 +157,9 @@ def test_categorie_hors_liste_refusee(client: TestClient) -> None:
         ("BUR_DAYS_CREDIT_MIN", 1.0),
         ("DAYS_REGISTRATION", -1.0),
         ("OWN_CAR_AGE", -2.0),
+        ("HOUR_APPR_PROCESS_START", 24),  # règle de William
+        ("HOUR_APPR_PROCESS_START", -1),
+        ("HOUR_APPR_PROCESS_START", 12.5),
     ],
 )
 def test_regle_metier_violee(client: TestClient, feature: str, value: float) -> None:
@@ -177,6 +180,9 @@ def test_regle_metier_violee(client: TestClient, feature: str, value: float) -> 
         ("PREV_DAYS_DECISION_MEAN", 0.0),
         ("DAYS_REGISTRATION", 0.0),
         ("OWN_CAR_AGE", 0.0),
+        ("HOUR_APPR_PROCESS_START", 0),
+        ("HOUR_APPR_PROCESS_START", 23),
+        ("HOUR_APPR_PROCESS_START", 23.0),
         ("PREV_DAYS_LAST_DUE_1ST_VERSION_MAX", 2_000.0),  # échéance prévue : future possible
     ],
 )
