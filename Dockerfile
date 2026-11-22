@@ -26,9 +26,14 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 FROM python:3.15-slim
 # Correctifs de sécurité Debian publiés après l'image de base (sinon le scan Trivy
 # de la release bloque sur des CVE déjà corrigées en amont).
+# libgomp1 : runtime OpenMP requis par LightGBM (absent de l'image slim).
+# pip est retiré : l'environnement arrive tout prêt du builder, et pip embarque ses propres
+# copies de msgpack, urllib3 et setuptools, signalées par Trivy (release v0.1.0 bloquée).
 RUN apt-get update \
     && apt-get upgrade -y --no-install-recommends \
+    && apt-get install -y --no-install-recommends libgomp1 \
     && rm -rf /var/lib/apt/lists/* \
+    && python -m pip uninstall --yes --no-input pip \
     && useradd --create-home --uid 10001 app
 COPY --from=builder --chown=app:app /app/.venv /app/.venv
 ENV PATH="/app/.venv/bin:$PATH" \
