@@ -160,6 +160,12 @@ mesurée. Architecture : `docs/architecture.md`.
     simples, une stack de moins) ; choix RGPD.
 - **Indicateurs de la fiche** : captures du stockage (adéquation aux exigences du
   monitoring ; stratégie définie et documentée).
+- **Décisions de William dans #16 (22/11/2026)** : tout tracer (traçabilité, entrées,
+  sorties, performance, erreurs, source) ; fenêtre glissante de **30 jours** ; archivage
+  quotidien des lignes expirées (Parquet dans un dataset HF privé), **démonstratif** :
+  archives non conservées après le projet ; chiffrement de colonnes évoqué à l'oral sans
+  implémentation ; projet Neon en **région UE (Francfort)** ; colonne `source`
+  (`api`, `ui-demo`, `ci`). `SK_ID_CURR` pseudonymisé (HMAC). Détail : `docs/monitoring.md`.
 - **Question d'oral probable** : « Ta base de logs tombe une heure : que se passe-t-il pour
   Crédit Express, et que perds-tu pour le monitoring ? »
 
@@ -192,6 +198,10 @@ mesurée. Architecture : `docs/architecture.md`.
   - soutenance : démo du dashboard en ligne sur le trafic simulé.
 - **Indicateurs de la fiche** : analyse du data drift (visualisation présente ;
   interprétation).
+- **Révision (William, 22/11/2026, #16)** : le dashboard devient un **onglet de l'app
+  Gradio du Space de l'API** (Gradio monté sur FastAPI, #40), et non un second Space
+  Streamlit : un compte gratuit n'héberge que 2 Spaces ZeroGPU, réservés au SDK Gradio, et le
+  SDK Docker est payant. Lecture sur Neon inchangée ; analyse planifiée inchangée.
 - **Question d'oral probable** : « Ton rapport Evidently dit que 30 % des features ont
   dérivé : est-ce grave, et comment le sais-tu sans cible en production ? »
 

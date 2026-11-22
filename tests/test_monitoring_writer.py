@@ -135,3 +135,19 @@ def test_arret_recu_au_milieu_d_un_lot(engine: sa.Engine) -> None:
     writer.start()
     writer.stop()
     assert len(rows(engine)) == 3
+
+
+def test_ligne_json_sur_stdout_sans_configuration() -> None:
+    # Processus neuf, logging non configuré (comme sous uvicorn) : la ligne doit sortir.
+    import subprocess
+    import sys
+
+    code = (
+        "import uuid\n"
+        "from credit_scoring.monitoring.writer import ProductionLogWriter\n"
+        "ProductionLogWriter(None).submit({'source': 'ci', 'request_id': uuid.uuid4()})\n"
+    )
+    out = subprocess.run(  # noqa: S603 - code de test constant, interpréteur courant
+        [sys.executable, "-c", code], capture_output=True, text=True, check=True
+    ).stdout
+    assert json.loads(out.strip().splitlines()[-1])["source"] == "ci"

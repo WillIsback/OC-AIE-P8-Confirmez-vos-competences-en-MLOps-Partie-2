@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import logging
 import queue
+import sys
 import threading
 from typing import Any
 
@@ -21,6 +22,14 @@ from credit_scoring.monitoring.schema import prediction_logs
 
 LOGGER_NAME = "credit_scoring.production"
 log = logging.getLogger(LOGGER_NAME)
+if not log.handlers:  # pragma: no branch - garde de réimport
+    # Une ligne JSON brute par appel sur stdout, quelle que soit la configuration du logging
+    # de l'hôte (uvicorn laisse la racine en WARNING) : collectable par les logs du Space.
+    _stdout = logging.StreamHandler(sys.stdout)
+    _stdout.setFormatter(logging.Formatter("%(message)s"))
+    log.addHandler(_stdout)
+    log.setLevel(logging.INFO)
+    log.propagate = False
 _errors = logging.getLogger(__name__)
 _STOP = object()
 
