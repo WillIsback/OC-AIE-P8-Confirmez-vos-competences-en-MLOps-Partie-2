@@ -86,3 +86,8 @@ markers = [
 # Script d'export lancé dans l'environnement de P6 (cloudpickle n'est pas une dépendance de P8)
 module = ["cloudpickle"]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# pyarrow ne publie ni stubs ni marqueur py.typed (archivage des journaux, #16)
+module = ["pyarrow", "pyarrow.*"]
+ignore_missing_imports = true
