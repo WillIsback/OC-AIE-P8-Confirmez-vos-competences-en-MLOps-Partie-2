@@ -35,3 +35,8 @@ mlflow-artifacts/
 
 # Artefacts du modèle (publiés sur le Hub HF, voir docs/artefacts.md)
 artifacts/
+.neon
+node_modules/
+neon.ts
+package.json
+package-lock.json
