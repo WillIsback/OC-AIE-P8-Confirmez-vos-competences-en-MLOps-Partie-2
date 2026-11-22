@@ -82,3 +82,16 @@ def test_database_url(monkeypatch: pytest.MonkeyPatch) -> None:
     assert db.database_url() is None
     monkeypatch.setenv("DATABASE_URL", "sqlite:///x.db")
     assert db.database_url() == "sqlite:///x.db"
+
+
+def test_migration_depuis_l_environnement(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    url = f"sqlite:///{tmp_path / 'env.db'}"
+    monkeypatch.setenv("DATABASE_URL", url)
+    db.main()
+    assert columns(url) == expected()
+
+
+def test_migration_sans_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    with pytest.raises(SystemExit, match="DATABASE_URL"):
+        db.main()

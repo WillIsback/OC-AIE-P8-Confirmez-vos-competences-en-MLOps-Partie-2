@@ -83,12 +83,12 @@ def test_version_qui_n_est_pas_un_tag_refusee(version: str) -> None:
 def test_deploiement_pousse_les_secrets_avant_les_fichiers() -> None:
     api = FakeApi(["RUNNING"])
     files = ds.space_files("v0.2.1", REQS, REV)
-    ds.deploy(api, SPACE, files, {"API_KEY": "k", "HF_TOKEN": "t"})
+    ds.deploy(api, SPACE, files, {"API_KEY": "k", "HF_TOKEN": "t", "DATABASE_URL": "pg"})
     kinds = [c[0] for c in api.calls]
-    assert kinds == ["create_repo", "secret", "secret", "commit"]  # secrets avant le build
+    assert kinds == ["create_repo", "secret", "secret", "secret", "commit"]  # avant le build
     assert api.calls[0][1]["space_sdk"] == "gradio"
-    assert {c[1] for c in api.calls if c[0] == "secret"} == {"API_KEY", "HF_TOKEN"}
-    assert set(api.calls[3][1]) == set(files)
+    assert {c[1] for c in api.calls if c[0] == "secret"} == {"API_KEY", "HF_TOKEN", "DATABASE_URL"}
+    assert set(api.calls[4][1]) == set(files)
 
 
 def test_materiel_du_space_jamais_modifie() -> None:
@@ -157,6 +157,7 @@ def test_test_de_fumee_verifie_version_et_prediction() -> None:
     ds.smoke("https://x.hf.space", api_key="k", version="v0.2.1", fetch=fetch)
     predict_headers = fetch.seen[1][1]
     assert predict_headers["X-API-Key"] == "k"
+    assert predict_headers["X-Client"] == "ci"  # trafic de CI distingué (#16, A1)
 
 
 def test_test_de_fumee_refuse_une_ancienne_version() -> None:
@@ -179,3 +180,9 @@ def test_test_de_fumee_refuse_une_prediction_en_erreur() -> None:
 def test_corps_de_la_prediction_est_le_client_synthetique() -> None:
     body = json.loads(ds.smoke_payload())
     assert len(body) == 122
+
+
+def test_secrets_du_space(monkeypatch: pytest.MonkeyPatch) -> None:
+    for key, value in {"API_KEY": "k", "SPACE_HF_TOKEN": "t", "DATABASE_URL": "pg"}.items():
+        monkeypatch.setenv(key, value)
+    assert ds.space_secrets() == {"API_KEY": "k", "HF_TOKEN": "t", "DATABASE_URL": "pg"}

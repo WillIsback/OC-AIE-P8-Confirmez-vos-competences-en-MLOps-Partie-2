@@ -36,3 +36,16 @@ def run_migrations(url: str, revision: str = "head", *, downgrade: bool = False)
         command.downgrade(config, revision)
     else:
         command.upgrade(config, revision)
+
+
+def main() -> None:
+    """`python -m credit_scoring.monitoring.db` : migre la base de `DATABASE_URL` (job deploy)."""
+    url = database_url()
+    if not url:
+        raise SystemExit("DATABASE_URL absente : aucune base à migrer")
+    run_migrations(url)
+    print("Migrations appliquées (head).")
+
+
+if __name__ == "__main__":  # pragma: no cover - point d'entrée CLI
+    main()

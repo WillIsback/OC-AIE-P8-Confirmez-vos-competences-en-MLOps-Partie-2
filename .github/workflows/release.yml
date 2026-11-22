@@ -153,7 +153,10 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: uv run python scripts/model_hub.py fetch
 
-      - name: Non-régression contre P6 et API sur 1 000 clients réels
+      - name: Non-régression contre P6, API sur 1 000 clients réels, base Neon
+        env:
+          # Test Neon dans un schéma temporaire supprimé après coup (#16).
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: uv run pytest -m integration --no-cov
 
   image:
@@ -346,10 +349,16 @@ jobs:
       - name: Dépendances (lockfile vérifié)
         run: uv sync --locked
 
+      - name: Migrations de la base de production (avant le nouveau code)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: uv run python -m credit_scoring.monitoring.db
+
       - name: Déployer puis vérifier l'URL publique
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           SPACE_HF_TOKEN: ${{ secrets.SPACE_HF_TOKEN }}
           API_KEY: ${{ secrets.API_KEY }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
           VERSION: ${{ needs.detect.outputs.version }}
         run: uv run python scripts/deploy_space.py --version "$VERSION"
