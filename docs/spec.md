@@ -33,7 +33,8 @@ mesurée. Architecture : `docs/architecture.md`.
     négatif) → refus **422** avec message explicite.
   - Valeur **inhabituelle** (hors des bornes du jeu d'entraînement mais plausible) →
     **acceptée et signalée** (champ d'avertissement dans la réponse, journalisée pour le
-    monitoring). *[recommandation de l'agent, incluse dans l'option 2 — à confirmer]*
+    monitoring). Confirmé par William le 22/11/2026, avec la liste des règles métier, la
+    politique des `null` et le refus des catégories inconnues : voir `docs/api.md`.
 - **Conséquences** :
   - code : schéma Pydantic généré à partir de la liste ordonnée des features, des règles
     métier et des bornes de `preprocessing_bundle.joblib` ;
@@ -68,7 +69,10 @@ mesurée. Architecture : `docs/architecture.md`.
   - code : script d'extraction depuis le Registry P6 (`manifest.json` : run id, version du
     Registry, empreintes SHA-256) ; chargement unique dans le `lifespan` FastAPI ;
   - tests : non-régression des scores contre P6 (test le plus important du projet) ;
-  - CI/CD : le build télécharge le dépôt HF public à une révision figée (pas de secret) ;
+  - CI/CD : le build télécharge le dépôt HF à une révision figée (`model_revision.txt`).
+    **Dépôt privé** (William, 22/11/2026) : l'échantillon de clients vient des données
+    Kaggle Home Credit, dont le règlement interdit la redistribution ; téléchargement
+    authentifié par le secret `HF_TOKEN`, déjà nécessaire au déploiement des Spaces ;
   - étape 4 : point de départ mesuré ; une version ONNX se branchera au même endroit ;
   - soutenance : MLflow reste la source de vérité de la traçabilité, pas un runtime.
 - **Indicateurs de la fiche** : scripts API (modèle géré sans erreur) ; Dockerfile (ne
