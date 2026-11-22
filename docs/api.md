@@ -55,7 +55,24 @@ les règles.
 **Inhabituel → 200 + avertissement** : une valeur hors des bornes [min ; max] du jeu
 d'entraînement est acceptée et décrite dans `warnings` (feature, valeur, bornes). Le
 client est réel ; le refuser bloquerait le métier, et l'avertissement alimente le suivi de
-dérive. Les 79 `autoFE_*` (formules OpenFE sans sens métier) n'ont que ce contrôle.
+dérive. Les 79 `autoFE_*` (formules OpenFE sans sens métier) n'ont que ce contrôle. Un arbre
+n'extrapole pas : au-delà de la dernière coupure, la valeur reçoit le score de la borne
+(ex. `HOUR_APPR_PROCESS_START` = 25 donne le même score que 23).
+
+Chaque avertissement porte l'**importance globale** de la feature (idée de William) :
+`importance_rank` (1 = la plus forte, sur 122) et `importance_share` (part du gain total du
+booster servi, calculée une fois au démarrage, sans coût par requête). Un dépassement sur
+une feature du haut du classement mérite une attention immédiate ; en fin de classement, il
+pèse peu sur le score. Exemples sur le modèle servi : `autoFE_f_0` rang 1 (19,3 % du gain),
+`OCCUPATION_TYPE` rang 8, `AMT_CREDIT` rang 18 (1,2 %), `HOUR_APPR_PROCESS_START` rang 108
+(0,2 %) ; 2 features ont un gain nul.
+
+Pourquoi le gain et pas SHAP : P6 a utilisé |SHAP| moyen pour **sélectionner** les features
+(BorutaShap, sur un LightGBM de 200 arbres), pas pour classer le modèle servi ; le gain est
+lu directement dans le booster en production. La contribution SHAP locale (impact de la
+valeur sur le score de ce client) coûterait une seconde passe sur les 2 983 arbres à chaque
+avertissement : écartée, elle relève de l'explication d'une décision, pas de la qualité des
+données.
 
 **Ordre des contrôles** : clé d'API (401) avant la validation (422) — un appelant non
 authentifié n'apprend rien du contrat.

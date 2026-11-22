@@ -30,6 +30,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """
     app.state.api_key = configured_api_key()
     app.state.model = get_model()
+    _ = app.state.model.importance  # calculée ici plutôt qu'à la première requête
     app.state.demo_clients = load_demo_clients(model_dir())
     yield
 

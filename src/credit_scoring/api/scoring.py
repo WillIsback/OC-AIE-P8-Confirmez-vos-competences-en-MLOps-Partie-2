@@ -16,10 +16,17 @@ SAMPLE_FILE = "sample_clients.csv"
 
 
 def out_of_bounds(
-    values: dict[str, Any], bounds: dict[str, dict[str, float]]
+    values: dict[str, Any],
+    bounds: dict[str, dict[str, float]],
+    importance: dict[str, tuple[int, float]],
 ) -> list[FeatureWarning]:
-    """Features numériques hors des bornes [min ; max] du jeu d'entraînement (bornes incluses)."""
+    """Features numériques hors des bornes [min ; max] du jeu d'entraînement (bornes incluses).
+
+    Chaque avertissement porte l'importance globale de la feature : un dépassement sur une
+    feature du haut du classement pèse plus sur le score qu'un dépassement en fin de liste.
+    """
     warnings: list[FeatureWarning] = []
+    n_features = len(importance)
     for feature in FEATURE_ORDER:
         value = values.get(feature)
         limits = bounds.get(feature)
@@ -27,14 +34,18 @@ def out_of_bounds(
             continue
         low, high = limits["min"], limits["max"]
         if not low <= value <= high:
+            rank, share = importance[feature]
             warnings.append(
                 FeatureWarning(
                     feature=feature,
                     value=float(value),
                     min=low,
                     max=high,
+                    importance_rank=rank,
+                    importance_share=share,
                     message=f"{feature} = {float(value)} hors des bornes du jeu "
-                    f"d'entraînement [{low} ; {high}]",
+                    f"d'entraînement [{low} ; {high}] ; importance : rang "
+                    f"{rank}/{n_features} ({share:.1%} du gain)",
                 )
             )
     return warnings
@@ -53,7 +64,7 @@ def score(
         decision="refusé" if int(row["decision"]) == 1 else "accordé",
         threshold=model.threshold,
         model_version=model.version,
-        warnings=out_of_bounds(values, model.features.numeric_bounds),
+        warnings=out_of_bounds(values, model.features.numeric_bounds, model.importance),
     )
 
 

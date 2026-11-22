@@ -71,6 +71,8 @@ class FeatureWarning(BaseModel):
     value: float
     min: float
     max: float
+    importance_rank: int = Field(description="rang d'importance globale (1 = la plus forte)")
+    importance_share: float = Field(description="part du gain total du modèle (0 à 1)")
     message: str
 
 

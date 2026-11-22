@@ -191,14 +191,20 @@ def test_valeurs_limites_acceptees(client: TestClient, feature: str, value: floa
 def test_hors_bornes_du_train_accepte_avec_avertissement(client: TestClient) -> None:
     r = client.post("/predict", json=payload(AMT_CREDIT=5_000_000.0), headers=AUTH)
     assert r.status_code == 200
-    assert r.json()["warnings"] == [
+    warnings = r.json()["warnings"]
+    message = warnings[0].pop("message")
+    assert message.startswith(
+        "AMT_CREDIT = 5000000.0 hors des bornes du jeu d'entraînement "
+        "[45000.0 ; 4050000.0] ; importance : rang 1/122"
+    )
+    assert warnings == [
         {
             "feature": "AMT_CREDIT",
             "value": 5_000_000.0,
             "min": 45_000.0,
             "max": 4_050_000.0,
-            "message": "AMT_CREDIT = 5000000.0 hors des bornes du jeu d'entraînement "
-            "[45000.0 ; 4050000.0]",
+            "importance_rank": 1,
+            "importance_share": warnings[0]["importance_share"],
         }
     ]
 
@@ -285,3 +291,11 @@ def test_detail_422_compact(client: TestClient) -> None:
     assert detail == [{"loc": ["body", "AMT_CREDIT"], "msg": "Field required", "type": "missing"}]
     bad = client.post("/predict", json=payload(CNT_FAM_MEMBERS=0), headers=AUTH).json()
     assert bad["detail"][0]["input"] == 0
+
+
+def test_avertissement_porte_l_importance_globale(client: TestClient) -> None:
+    w = client.post("/predict", json=payload(AMT_CREDIT=5_000_000.0), headers=AUTH).json()
+    warning = w["warnings"][0]
+    assert warning["importance_rank"] == 1  # seule feature qui pilote la cible synthétique
+    assert 0 < warning["importance_share"] <= 1
+    assert "rang 1/122" in warning["message"]
