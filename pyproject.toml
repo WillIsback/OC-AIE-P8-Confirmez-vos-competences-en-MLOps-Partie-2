@@ -12,7 +12,8 @@ dependencies = [
     "lightgbm>=4.7.0",
     "numpy>=2.5.5",
     "pandas>=3.1.1",
-    "pydantic>=2.12",
+    # < 2.13 : le Space Gradio installe gradio[mcp], qui exige pydantic <= 2.12.5 (#31)
+    "pydantic>=2.12,<2.13",
     "uvicorn",
 ]
 

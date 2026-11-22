@@ -2,6 +2,7 @@
 
     uv run python scripts/model_hub.py fetch            # révision figée de model_revision.txt
     uv run python scripts/model_hub.py publish          # HF_TOKEN requis, met à jour la révision
+    uv run python scripts/model_hub.py card             # publie docs/model-card.md (README)
 
 `fetch` télécharge le dépôt modèle à la révision figée (un SHA de commit, jamais `main`),
 puis vérifie les empreintes SHA-256 du manifeste en chargeant le modèle.
@@ -49,6 +50,18 @@ def publish(source: Path, private: bool) -> str:
     return revision
 
 
+def publish_card(card: Path) -> None:
+    """Publie la model card ; n'affecte pas la révision figée des artefacts."""
+    commit = HfApi().upload_file(
+        path_or_fileobj=str(card),
+        path_in_repo="README.md",
+        repo_id=REPO_ID,
+        repo_type="model",
+        commit_message="Model card",
+    )
+    print(f"✅ model card publiée : {commit.commit_url}")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = parser.add_subparsers(dest="command", required=True)
@@ -57,9 +70,13 @@ def main() -> int:
     p = sub.add_parser("publish")
     p.add_argument("--source", type=Path, default=DEFAULT_DIR)
     p.add_argument("--private", action="store_true")
+    c = sub.add_parser("card")
+    c.add_argument("--file", type=Path, default=ROOT / "docs/model-card.md")
     args = parser.parse_args()
     if args.command == "fetch":
         fetch(args.dest, pinned_revision(REVISION_FILE))
+    elif args.command == "card":
+        publish_card(args.file)
     else:
         publish(args.source, args.private)
     return 0
