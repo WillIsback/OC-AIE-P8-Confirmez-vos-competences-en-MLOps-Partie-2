@@ -5,12 +5,14 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import math
 import uuid
 from datetime import datetime
 from typing import Any
 
 SOURCES = frozenset({"api", "ui-demo", "ci"})
 MAX_BODY_BYTES = 65_536
+MAX_INPUT_CHARS = 1_000  # valeur reçue recopiée dans le détail d'un 422
 ERROR_TYPES = {401: "unauthorized", 404: "not_found", 422: "validation"}
 
 
@@ -32,9 +34,12 @@ def error_type(status_code: int) -> str | None:
 
 
 def _sanitize(value: Any) -> Any:
-    """Caractère nul remplacé (refusé par JSONB dans les chaînes)."""
+    """Valeurs refusées par JSONB neutralisées : caractère nul, surrogate isolé, NaN, infini."""
     if isinstance(value, str):
-        return value.replace("\x00", "�")
+        cleaned = value.replace("\x00", "\ufffd")
+        return cleaned.encode("utf-8", "replace").decode("utf-8")
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
     if isinstance(value, dict):
         return {_sanitize(k): _sanitize(v) for k, v in value.items()}
     if isinstance(value, list):
@@ -48,8 +53,31 @@ def received_body(body: bytes) -> Any:
         return {"_raw": f"<tronqué, {len(body)} octets>"}
     try:
         return _sanitize(json.loads(body))
+    except RecursionError:
+        return {"_raw": f"<JSON trop imbriqué, {len(body)} octets>"}
     except ValueError:
         return {"_raw": f"<non-JSON, {len(body)} octets>"}
+
+
+def _error_detail(response_body: bytes, client_ref: str | None) -> Any:
+    """Détail compact du 422 : valeurs reçues tronquées, identifiant de démo pseudonymisé."""
+    try:
+        detail = json.loads(response_body).get("detail")
+    except (ValueError, AttributeError, RecursionError):
+        return None
+    if not isinstance(detail, list):
+        return _sanitize(detail)
+    for item in detail:
+        if not isinstance(item, dict):
+            continue
+        value = item.get("input")
+        if isinstance(value, str) and len(value) > MAX_INPUT_CHARS:
+            item["input"] = value[:MAX_INPUT_CHARS] + f"… <{len(value)} caractères>"
+        loc = item.get("loc")
+        # Route de démo : loc = ["sample_clients", <SK_ID_CURR>, champ] → pseudonyme.
+        if isinstance(loc, list) and len(loc) > 1 and loc[0] == "sample_clients":
+            loc[1] = client_ref
+    return _sanitize(detail)
 
 
 def build(
@@ -72,10 +100,7 @@ def build(
     error_detail = None
     if status_code == 422:
         features = received_body(body)
-        try:
-            error_detail = json.loads(response_body).get("detail")
-        except (ValueError, AttributeError):
-            error_detail = None
+        error_detail = _error_detail(response_body, state.get("client_ref"))
     warnings = (
         [
             {"feature": w.feature, "value": w.value, "importance_rank": w.importance_rank}

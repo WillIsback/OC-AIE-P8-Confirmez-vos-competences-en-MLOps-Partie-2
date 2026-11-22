@@ -15,7 +15,8 @@ from sqlalchemy.dialects.postgresql import JSONB
 revision = "0001"
 down_revision = None
 
-Json = sa.JSON().with_variant(JSONB(), "postgresql")
+# none_as_null : une valeur absente est un NULL SQL (« IS NULL »), pas le JSON `null`.
+Json = sa.JSON(none_as_null=True).with_variant(JSONB(none_as_null=True), "postgresql")
 
 
 def upgrade() -> None:

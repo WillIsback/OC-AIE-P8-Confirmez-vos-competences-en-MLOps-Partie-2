@@ -73,12 +73,31 @@ class ProductionLogWriter:
             self._drop()
 
     def stop(self, timeout: float = 5.0) -> None:
-        """Vide la file (au plus `timeout` secondes) puis arrête le thread."""
+        """Vide la file puis arrête le thread, en au plus deux fois `timeout` secondes.
+
+        Si la base ne répond plus, les lignes restées en file sont comptées comme perdues :
+        l'arrêt du service n'attend jamais une base bloquée.
+        """
         if self._thread is None:
             return
-        self._queue.put(_STOP)
+        try:
+            self._queue.put(_STOP, timeout=timeout)
+        except queue.Full:
+            self._drop(self._discard_pending())
+            self._queue.put_nowait(_STOP)
         self._thread.join(timeout)
+        if self._thread.is_alive():
+            self._drop(self._discard_pending())
         self._thread = None
+
+    def _discard_pending(self) -> int:
+        n = 0
+        while True:
+            try:
+                item = self._queue.get_nowait()
+            except queue.Empty:
+                return n
+            n += item is not _STOP
 
     def _run(self, engine: sa.Engine) -> None:
         while True:
@@ -101,9 +120,19 @@ class ProductionLogWriter:
         try:
             with engine.begin() as conn:
                 conn.execute(sa.insert(prediction_logs), records)
-        except Exception as exc:  # base en panne : compter, ne jamais propager
-            self._drop(len(records))
-            # Le message d'une erreur de connexion peut contenir l'URL (et son mot de passe).
-            _errors.warning(
-                "Écriture de %d journaux impossible (%s)", len(records), type(exc).__name__
-            )
+            return
+        except sa.exc.DBAPIError as exc:
+            # Une ligne refusée (contrainte, valeur) annule tout le lot : on rejoue ligne à
+            # ligne pour ne perdre qu'elle. Base injoignable : inutile d'insister.
+            if len(records) > 1 and not isinstance(exc, sa.exc.OperationalError):
+                for one in records:
+                    self._insert(engine, [one])
+                return
+            failure: Exception = exc
+        except Exception as exc:  # jamais propager depuis le thread d'écriture
+            failure = exc
+        self._drop(len(records))
+        # Le message d'une erreur de connexion peut contenir l'URL (et son mot de passe).
+        _errors.warning(
+            "Écriture de %d journaux impossible (%s)", len(records), type(failure).__name__
+        )

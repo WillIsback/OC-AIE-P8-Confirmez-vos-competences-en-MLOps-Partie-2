@@ -20,7 +20,12 @@ def make_engine(url: str) -> sa.Engine:
     if url.startswith(("postgres://", "postgresql://")):
         url = "postgresql+psycopg://" + url.split("://", 1)[1]
         # PgBouncer en mode transaction ne garde pas les requêtes préparées côté serveur.
-        return sa.create_engine(url, pool_pre_ping=True, connect_args={"prepare_threshold": None})
+        # connect_timeout : une base injoignable ne bloque pas le thread d'écriture indéfiniment.
+        return sa.create_engine(
+            url,
+            pool_pre_ping=True,
+            connect_args={"prepare_threshold": None, "connect_timeout": 10},
+        )
     return sa.create_engine(url, pool_pre_ping=True)
 
 

@@ -8,7 +8,8 @@ from sqlalchemy.dialects.postgresql import JSONB
 metadata = sa.MetaData()
 
 # JSONB sur Postgres (requêtes et index), JSON ailleurs (tests sur SQLite).
-Json = sa.JSON().with_variant(JSONB(), "postgresql")
+# none_as_null : une valeur absente est un NULL SQL (« IS NULL »), pas le JSON `null`.
+Json = sa.JSON(none_as_null=True).with_variant(JSONB(none_as_null=True), "postgresql")
 
 prediction_logs = sa.Table(
     "prediction_logs",

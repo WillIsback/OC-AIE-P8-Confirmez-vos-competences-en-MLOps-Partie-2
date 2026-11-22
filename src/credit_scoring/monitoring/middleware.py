@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import time
 import uuid
 from datetime import UTC, datetime
@@ -14,6 +15,7 @@ from credit_scoring import __version__
 from credit_scoring.monitoring import record
 
 DEMO_PATH = "/predict/{sk_id_curr}"
+_errors = logging.getLogger(__name__)
 
 
 def logged_path(scope: Scope) -> str | None:
@@ -31,15 +33,16 @@ def logged_path(scope: Scope) -> str | None:
 async def _buffer(receive: Receive) -> tuple[bytes, Receive]:
     """Lit tout le corps, puis rejoue les messages à l'application."""
     messages: list[Message] = []
-    body = b""
+    chunks: list[bytes] = []  # join final : linéaire (`body += chunk` serait quadratique)
     while True:
         message = await receive()
         messages.append(message)
         if message["type"] != "http.request":
             break
-        body += message.get("body", b"")
+        chunks.append(message.get("body", b""))
         if not message.get("more_body", False):
             break
+    body = b"".join(chunks)
     pending = iter(messages)
 
     async def replay() -> Message:
@@ -82,9 +85,9 @@ class PredictionLogMiddleware:
         try:
             await self.app(scope, replay, send_wrapper)
         finally:
-            model = getattr(scope["app"].state, "model", None)
-            writer.submit(
-                record.build(
+            try:
+                model = getattr(scope["app"].state, "model", None)
+                entry = record.build(
                     request_id=request_id,
                     created_at=created_at,
                     source=record.source(Headers(scope=scope).get("x-client")),
@@ -97,4 +100,6 @@ class PredictionLogMiddleware:
                     body=body,
                     response_body=response_body,
                 )
-            )
+                writer.submit(entry)
+            except Exception as exc:  # la journalisation n'atteint jamais la réponse
+                _errors.warning("Journalisation impossible (%s)", type(exc).__name__)
