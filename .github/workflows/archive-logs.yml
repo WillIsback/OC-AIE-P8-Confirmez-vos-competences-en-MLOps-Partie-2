@@ -53,5 +53,8 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           OLDER_THAN: ${{ inputs.older_than || '30d' }}
-          DRY_RUN: ${{ inputs.dry_run && '--dry-run' || '' }}
-        run: uv run --no-sync python scripts/archive_logs.py --older-than "$OLDER_THAN" $DRY_RUN
+          DRY_RUN: ${{ inputs.dry_run || false }}
+        run: |
+          args=(--older-than "$OLDER_THAN")
+          if [ "$DRY_RUN" = "true" ]; then args+=(--dry-run); fi
+          uv run --no-sync python scripts/archive_logs.py "${args[@]}"
