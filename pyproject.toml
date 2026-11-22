@@ -67,7 +67,7 @@ files = ["src", "tests", "scripts"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
-addopts = "-ra --strict-markers --cov=credit_scoring --cov-report=term-missing --cov-fail-under=80"
+addopts = "-ra --strict-markers --cov=credit_scoring --cov-branch --cov-report=term-missing --cov-fail-under=80"
 markers = [
     "integration: appelle un service réel (exclu de la CI de PR)",
 ]

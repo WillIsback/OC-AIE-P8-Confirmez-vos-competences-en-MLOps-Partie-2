@@ -73,7 +73,8 @@ jobs:
         run: uv sync --locked
 
       - name: Tests unitaires et couverture
-        run: uv run pytest -m "not integration"
+        # Rapport de couverture (lignes et branches) publié dans le résumé du job.
+        run: uv run pytest -m "not integration" --cov-report="markdown-append:$GITHUB_STEP_SUMMARY"
 
   docker:
     name: ci-test (image Docker)
