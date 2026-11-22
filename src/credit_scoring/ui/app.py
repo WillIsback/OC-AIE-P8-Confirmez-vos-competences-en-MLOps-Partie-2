@@ -4,6 +4,11 @@ Les gestionnaires sont des fonctions de module (client et clients en premiers ar
 testables sans lancer Gradio. Chaque score passe par la vraie route `/predict` (client
 interne, `X-Client: ui-demo`) ; les valeurs de départ viennent de l'échantillon de démo.
 Adapté de l'interface de P5 : pas de connexion (Space de démonstration, clé côté serveur).
+
+Les événements sont en `api_visibility="private"` : endpoints non documentés (ni page
+« Use via API », ni clients Gradio). En Gradio 6.32, ils restent appelables par
+`/gradio_api/…` ; un appel direct n'a que le pouvoir de l'interface (clients de démo, six
+champs validés par l'API), ce qui est la décision D4 : la démonstration est publique.
 """
 
 from __future__ import annotations
@@ -32,7 +37,7 @@ AUTOFE_NOTE = (
     "une valeur sert à éprouver le contrat de l'API (avertissement, refus 422), pas à mesurer "
     "la sensibilité du score."
 )
-PRIVATE: dict[str, Any] = {"api_visibility": "private"}  # pas d'API Gradio publique
+PRIVATE: dict[str, Any] = {"api_visibility": "private"}  # non documentés (voir en tête)
 
 
 @dataclass(frozen=True)
@@ -121,11 +126,9 @@ def random_id(clients: dict[int, dict[str, Any]], rng: random.Random) -> int:
 def _component(field: Field) -> Any:
     if field.kind == "choice":
         return gr.Dropdown(choices(field), label=field.label, info=field.info or None)
-    return gr.Number(
-        label=field.label,
-        info=field.info or None,
-        precision=0 if field.kind == "int" else None,
-    )
+    # Pas de `precision=0` pour les entiers : Gradio arrondirait 12,5 en 12 sans le dire ;
+    # c'est l'API qui refuse un décimal (422 int_from_float), et l'interface l'affiche.
+    return gr.Number(label=field.label, info=field.info or None)
 
 
 THEME = gr.themes.Base(

@@ -17,7 +17,10 @@ def fmt_number(value: float | int | None) -> str:
     """`514777.5` → `514 777,5` ; entier sans décimale ; `None` → chaîne vide."""
     if value is None:
         return ""
-    text = f"{int(value):,}" if float(value).is_integer() else f"{value:,.2f}".rstrip("0")
+    if float(value).is_integer():
+        text = f"{int(value):,}"
+    else:  # 6 décimales au plus, sans zéros finaux : 1.004 → 1,004 ; 0.0003 → 0,0003
+        text = f"{value:,.6f}".rstrip("0").rstrip(".")
     return text.replace(",", NNBSP).replace(".", ",")
 
 
@@ -63,6 +66,7 @@ def errors_markdown(err: ApiError) -> str:
     lines = []
     for e in err.details:
         field = e["loc"][-1] if e.get("loc") else "?"
-        received = f" (reçu : {e['input']})" if "input" in e else ""
+        value = e.get("input")
+        received = "" if "input" not in e else f" (reçu : {'vide' if value is None else value})"
         lines.append(f"- **{field}** : {e.get('msg', '')}{received}")
     return "**Refusé par l'API (422)**\n\n" + "\n".join(lines)

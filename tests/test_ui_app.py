@@ -179,3 +179,18 @@ def test_evenements_relies_aux_gestionnaires(ctx: Ctx) -> None:
     values = [clients[DEMO_VALID_ID][n] for n in NAMES]
     *_, error = run(by_name["score"](DEMO_VALID_ID, *values))
     assert error == ""
+
+
+def test_champs_entiers_sans_arrondi() -> None:
+    # 12,5 h doit atteindre l'API (422 int_from_float, règle de William), pas être arrondi.
+    demo = ui.build_ui(lambda: None, dict)  # type: ignore[arg-type,return-value]
+    numbers = [b for b in demo.blocks.values() if isinstance(b, gr.Number)]
+    assert numbers
+    assert all(n.precision is None for n in numbers)
+
+
+def test_api_gradio_documentee_telle_qu_elle_est() -> None:
+    # api_visibility="private" masque les endpoints de la doc Gradio sans les désactiver
+    # (Gradio 6.32) : le pouvoir d'un appel direct reste celui de l'interface (décision D4).
+    assert ui.PRIVATE == {"api_visibility": "private"}
+    assert "non documentés" in (ui.__doc__ or "")

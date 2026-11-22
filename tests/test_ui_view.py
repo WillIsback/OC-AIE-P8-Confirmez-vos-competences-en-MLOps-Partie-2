@@ -101,3 +101,19 @@ def test_erreurs_422_en_puces() -> None:
 
 def test_autre_erreur() -> None:
     assert errors_markdown(ApiError(500, "boom")) == "⚠️ API indisponible (statut 500)"
+
+
+@pytest.mark.parametrize(
+    ("value", "attendu"),
+    [(1.004, "1,004"), (12.999, "12,999"), (0.0003, "0,0003"), (-0.0012, "-0,0012"), (2.5, "2,5")],
+)
+def test_petites_valeurs_et_decimales(value: float, attendu: str) -> None:
+    assert fmt_number(value) == attendu
+
+
+def test_valeur_recue_vide() -> None:
+    err = ApiError(
+        422, [{"loc": ["body", "AMT_CREDIT"], "msg": "Input should be a number", "input": None}]
+    )
+    assert "(reçu : vide)" in errors_markdown(err)
+    assert "None" not in errors_markdown(err)

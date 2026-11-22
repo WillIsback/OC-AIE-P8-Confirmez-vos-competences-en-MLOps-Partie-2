@@ -42,8 +42,12 @@ flowchart LR
   jamais le navigateur. Les appels directs à `/predict` (curl, Swagger) l'exigent toujours.
 - **Trafic distingué** : `source = ui-demo` dans les journaux ; les analyses de
   production filtrent `source = 'api'` (`docs/monitoring.md`).
-- **Pas d'API Gradio publique** : événements en `api_visibility="private"`, historique des
-  entrées désactivé.
+- **Endpoints Gradio non documentés** : événements en `api_visibility="private"` (ni page
+  « Use via API », ni clients Gradio), historique des entrées désactivé. En Gradio 6.32,
+  « private » masque ces endpoints sans les désactiver : un appel direct à `/gradio_api/…`
+  n'a que le pouvoir de l'interface (clients de démo, six champs validés par l'API). C'est
+  assumé : la démonstration est publique (D4) ; la clé, elle, ne quitte jamais le serveur.
+  Le serveur MCP de Gradio n'est pas activé.
 
 ## Lancer en local
 

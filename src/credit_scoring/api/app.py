@@ -204,7 +204,10 @@ def install_home(target: FastAPI) -> None:
     """Racine : l'interface Gradio si elle est installée (Space), sinon la page HTML."""
     try:
         from credit_scoring.ui import mount_ui
-    except ImportError:  # image Docker : pas d'extra `ui`
+    except ModuleNotFoundError as exc:
+        if exc.name != "gradio":  # Gradio présent mais cassé : l'échec doit se voir
+            raise
+        # Image Docker : pas d'extra `ui`.
         target.add_api_route("/", home, include_in_schema=False, response_class=HTMLResponse)
         return
     mount_ui(target)

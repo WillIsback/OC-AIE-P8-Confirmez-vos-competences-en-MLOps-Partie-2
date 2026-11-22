@@ -49,3 +49,20 @@ def test_sans_gradio_page_html(monkeypatch: pytest.MonkeyPatch) -> None:
     assert response.headers["content-type"].startswith("text/html")
     assert 'href="/docs"' in response.text
     assert __version__ in response.text
+
+
+def test_gradio_casse_n_est_pas_masque(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Gradio installé mais en erreur : l'échec doit être visible, pas un repli silencieux
+    # (sur le Space, le repli supprimerait aussi le middleware ZeroGPU).
+    import builtins
+
+    real_import = builtins.__import__
+
+    def broken(name: str, *args: object, **kwargs: object) -> object:
+        if name == "credit_scoring.ui":
+            raise ModuleNotFoundError("No module named 'gradio.x'", name="gradio.x")
+        return real_import(name, *args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(builtins, "__import__", broken)
+    with pytest.raises(ImportError):
+        install_home(FastAPI())
