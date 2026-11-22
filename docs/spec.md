@@ -69,7 +69,10 @@ mesurée. Architecture : `docs/architecture.md`.
   - code : script d'extraction depuis le Registry P6 (`manifest.json` : run id, version du
     Registry, empreintes SHA-256) ; chargement unique dans le `lifespan` FastAPI ;
   - tests : non-régression des scores contre P6 (test le plus important du projet) ;
-  - CI/CD : le build télécharge le dépôt HF à une révision figée (`model_revision.txt`).
+  - CI/CD : le service télécharge le dépôt HF à une révision figée (`model_revision.txt`)
+    **au démarrage**, pas au build (William, 22/11/2026) : l'image GHCR est publique et ne
+    doit contenir aucune donnée ; la même image, construite une fois, part sur le Space ;
+    un Hub injoignable ou un fichier altéré empêche le démarrage (échec visible).
     **Dépôt privé** (William, 22/11/2026) : l'échantillon de clients vient des données
     Kaggle Home Credit, dont le règlement interdit la redistribution ; téléchargement
     authentifié par le secret `HF_TOKEN`, déjà nécessaire au déploiement des Spaces ;

@@ -242,6 +242,7 @@ name = "credit-scoring"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
+    { name = "huggingface-hub" },
     { name = "lightgbm" },
     { name = "numpy" },
     { name = "pandas" },
@@ -252,7 +253,6 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "httpx2" },
-    { name = "huggingface-hub" },
     { name = "mypy" },
     { name = "pandas-stubs" },
     { name = "pytest" },
@@ -265,6 +265,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "fastapi" },
+    { name = "huggingface-hub", specifier = ">=2.4.0" },
     { name = "lightgbm", specifier = ">=4.7.0" },
     { name = "numpy", specifier = ">=2.5.5" },
     { name = "pandas", specifier = ">=3.1.1" },
@@ -275,7 +276,6 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "httpx2" },
-    { name = "huggingface-hub", specifier = ">=2.4.0" },
     { name = "mypy" },
     { name = "pandas-stubs", specifier = ">=3.1.0.261029" },
     { name = "pytest" },
