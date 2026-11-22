@@ -230,6 +230,9 @@ jobs:
     if: github.event_name == 'push' || !inputs.dry_run
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    # Environnement limité à main : RELEASE_TOKEN est un secret de cet environnement,
+    # illisible depuis toute autre branche.
+    environment: release
     permissions:
       contents: write
     steps:
