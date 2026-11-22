@@ -142,7 +142,12 @@ def load_model(model_dir: Path) -> ScoringModel:
     return ScoringModel(booster, features, float(manifest["threshold"]), manifest)
 
 
+def model_dir() -> Path:
+    """Dossier des artefacts : variable d'environnement `MODEL_DIR`, `artifacts/` sinon."""
+    return Path(os.environ.get("MODEL_DIR", str(DEFAULT_MODEL_DIR)))
+
+
 @lru_cache(maxsize=1)
 def get_model() -> ScoringModel:
     """Modèle du processus : chargé au premier appel, puis réutilisé."""
-    return load_model(Path(os.environ.get("MODEL_DIR", str(DEFAULT_MODEL_DIR))))
+    return load_model(model_dir())

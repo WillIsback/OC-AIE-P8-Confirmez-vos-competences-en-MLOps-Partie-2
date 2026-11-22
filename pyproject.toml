@@ -11,6 +11,7 @@ dependencies = [
     "lightgbm>=4.7.0",
     "numpy>=2.5.5",
     "pandas>=3.1.1",
+    "pydantic>=2.12",
     "uvicorn",
 ]
 
@@ -55,6 +56,8 @@ select = ["E", "F", "W", "I", "UP", "B", "SIM", "S", "N", "RUF"]
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101"]
 "scripts/export_p6_artifacts.py" = ["S301", "S608"]
+# Noms des features du modèle (OpenFE : autoFE_f_*), imposés par P6
+"src/credit_scoring/api/features_schema.py" = ["N815"]
 
 [tool.mypy]
 python_version = "3.12"
