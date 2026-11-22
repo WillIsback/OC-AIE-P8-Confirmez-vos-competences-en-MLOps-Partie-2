@@ -174,7 +174,7 @@ def build_ui(
     rng = random.Random()
 
     with gr.Blocks(title=TITLE) as demo:
-        gr.Markdown(f"# 🏦 {TITLE}")
+        gr.Markdown(f"# {TITLE}")
         gr.Markdown(
             f"Démonstration sur 1 000 clients du jeu de test · API v{__version__} · "
             "[documentation de l'API](/docs)",
@@ -185,7 +185,7 @@ def build_ui(
                 gr.Markdown("### Client")
                 with gr.Row():
                     sk_id = gr.Dropdown(label="SK_ID_CURR", choices=[], filterable=True, scale=3)
-                    lucky = gr.Button("🎲 Client au hasard", scale=1)
+                    lucky = gr.Button("Client au hasard", scale=1)
                 gr.Markdown("### Valeurs modifiables")
                 fields = [_component(f) for f in EDITABLE]
                 gr.Markdown(AUTOFE_NOTE, elem_classes="subtitle")
@@ -197,7 +197,7 @@ def build_ui(
                 error = gr.Markdown()
                 result = gr.HTML()
                 warnings = gr.Dataframe(
-                    headers=["Feature", "Valeur", "Bornes du train", "Rang", "Part du gain"],
+                    headers=["Feature", "Valeur", "Bornes (train)", "Rang", "Part"],
                     label="Avertissements (hors des bornes du jeu d'entraînement)",
                     interactive=False,
                     wrap=True,

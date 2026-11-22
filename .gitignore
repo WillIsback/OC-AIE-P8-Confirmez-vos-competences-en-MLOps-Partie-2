@@ -40,3 +40,4 @@ node_modules/
 neon.ts
 package.json
 package-lock.json
+.playwright-mcp/
