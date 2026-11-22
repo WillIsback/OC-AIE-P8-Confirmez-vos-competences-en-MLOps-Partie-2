@@ -2,8 +2,9 @@
 
     uv run python scripts/deploy_space.py --version v0.2.1
 
-Variables d'environnement : `HF_TOKEN` (écriture sur le Space), `API_KEY` et
-`SPACE_HF_TOKEN` (lecture du dépôt modèle privé), poussés comme secrets du Space.
+Variables d'environnement : `HF_TOKEN` (écriture sur le Space) ; `API_KEY`,
+`SPACE_HF_TOKEN` (lecture du dépôt modèle privé) et `DATABASE_URL` (journaux de production,
+#16), poussés comme secrets du Space.
 
 Étapes :
 1. crée le Space s'il n'existe pas (son matériel, ZeroGPU, n'est jamais modifié) ;
@@ -195,11 +196,21 @@ def smoke(url: str, api_key: str, version: str, fetch: Fetch = _urllib_fetch) ->
     expected = version.removeprefix("v")
     if status != 200 or health.get("version") != expected:
         raise RuntimeError(f"/health : {status} {health} (version attendue {expected})")
-    headers = {"X-API-Key": api_key, "Content-Type": "application/json"}
+    # X-Client: ci : le trafic du test de fumée est exclu des analyses de production (#16).
+    headers = {"X-API-Key": api_key, "Content-Type": "application/json", "X-Client": "ci"}
     status, prediction = fetch("POST", f"{url}/predict", headers, smoke_payload())
     if status != 200:
         raise RuntimeError(f"/predict : {status} {prediction}")
     print(f"✅ {url} : v{expected}, prédiction « {prediction.get('decision')} »")
+
+
+def space_secrets() -> dict[str, str]:
+    """Secrets poussés au Space (noms côté Space ; valeurs lues dans l'environnement)."""
+    return {
+        "API_KEY": os.environ.get("API_KEY", ""),
+        "HF_TOKEN": os.environ.get("SPACE_HF_TOKEN", ""),
+        "DATABASE_URL": os.environ.get("DATABASE_URL", ""),
+    }
 
 
 def main() -> int:
@@ -210,10 +221,7 @@ def main() -> int:
     parser.add_argument("--space", default=SPACE_ID)
     args = parser.parse_args()
     api = HfApi()  # HF_TOKEN
-    secrets = {
-        "API_KEY": os.environ.get("API_KEY", ""),
-        "HF_TOKEN": os.environ.get("SPACE_HF_TOKEN", ""),
-    }
+    secrets = space_secrets()
     revision = (ROOT / "model_revision.txt").read_text(encoding="utf-8")
     files = space_files(args.version, locked_requirements(), revision)
     deploy(api, args.space, files, secrets)

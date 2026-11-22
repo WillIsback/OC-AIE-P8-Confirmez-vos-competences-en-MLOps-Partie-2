@@ -7,7 +7,7 @@ dans `docs/spec.md`. Documentation interactive : `/docs` (Swagger, avec exemples
 
 | Route | Clé | Rôle |
 |---|---|---|
-| `GET /health` | non | vivacité et version déployée |
+| `GET /health` | non | vivacité, version déployée, état de la journalisation (`logging.database`, `logging.dropped`) |
 | `POST /predict` | oui | score d'un client décrit par ses 122 features |
 | `POST /predict/{sk_id_curr}` | oui | démo : client de l'échantillon (1 000 clients du test), **même validation** |
 | `GET /docs`, `/openapi.json` | non | documentation |
@@ -26,6 +26,10 @@ Réponse 200 :
 ```
 
 `decision` vaut `refusé` si `prob_default ≥ threshold` (seuil métier, coût FN = 10 × FP).
+
+Chaque appel `/predict…` est journalisé (`docs/monitoring.md`) : la réponse porte l'en-tête
+`X-Request-ID`, identifiant de sa ligne dans `prediction_logs`. L'en-tête facultatif
+`X-Client` (`ui-demo`, `ci`) classe l'appel hors du trafic de production.
 
 ## Contrat d'entrée (validé par William le 22/11/2026)
 

@@ -56,6 +56,20 @@ jobs:
     if: needs.changes.outputs.python == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    # Postgres éphémère : les tests de stockage (#16) tournent aussi sur le vrai dialecte
+    # (JSONB, timestamptz), pas seulement sur SQLite. Aucune donnée, aucun secret.
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 15
     steps:
       - name: Checkout du code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -73,6 +87,8 @@ jobs:
         run: uv sync --locked
 
       - name: Tests unitaires et couverture
+        env:
+          TEST_DATABASE_URL: postgresql://postgres:test@localhost:5432/postgres
         # Rapport de couverture (lignes et branches) publié dans le résumé du job.
         run: uv run pytest -m "not integration" --cov-report="markdown-append:$GITHUB_STEP_SUMMARY"
 
