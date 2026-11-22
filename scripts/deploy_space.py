@@ -40,7 +40,7 @@ from credit_scoring.api.features_schema import EXAMPLE_CLIENT  # noqa: E402
 
 SPACE_ID = "WillisBack/credit-scoring-api"
 GIT_URL = "https://github.com/WillIsback/OC-AIE-P8-Confirmez-vos-competences-en-MLOps-Partie-2"
-GRADIO_VERSION = "6.32.0"  # installé par le Space ; compatibilité vérifiée avec uv.lock
+GRADIO_VERSION = "6.32.0"  # le Space installe gradio[oauth,mcp] : pydantic <= 2.12.5 (#31)
 _TAG = re.compile(r"v\d+\.\d+\.\d+")
 ERROR_STAGES = {"BUILD_ERROR", "RUNTIME_ERROR", "CONFIG_ERROR", "NO_APP_FILE"}
 
