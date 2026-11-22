@@ -319,8 +319,8 @@ jobs:
           fi
           echo "✅ Release $VERSION publiée."
 
-  # Déploiement sur le Space HF : la même image (épinglée par digest) que celle scannée,
-  # attestée et publiée ; vérifiée ensuite sur l'URL publique (version + prédiction).
+  # Déploiement sur le Space HF (SDK Gradio, le SDK Docker étant payant) : le code du tag
+  # avec les versions exactes de uv.lock ; vérifié sur l'URL publique (version + prédiction).
   deploy:
     name: Déploiement sur le Space Hugging Face
     needs: [detect, image, publish]
@@ -351,9 +351,5 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           SPACE_HF_TOKEN: ${{ secrets.SPACE_HF_TOKEN }}
           API_KEY: ${{ secrets.API_KEY }}
-          IMAGE: ${{ needs.image.outputs.image }}
-          DIGEST: ${{ needs.image.outputs.digest }}
           VERSION: ${{ needs.detect.outputs.version }}
-        run: |
-          set -euo pipefail
-          uv run python scripts/deploy_space.py --image "${IMAGE%:*}@${DIGEST}" --version "$VERSION"
+        run: uv run python scripts/deploy_space.py --version "$VERSION"

@@ -15,14 +15,16 @@ flowchart LR
   g --> nr["gate-non-regression<br/>env ml-models<br/>artefacts + 1 000 clients réels"]
   nr --> img["image<br/>build unique, Trivy,<br/>GHCR + attestation"]
   img --> pub["publish<br/>env release<br/>tag + GitHub Release"]
-  pub --> dep["deploy<br/>env ml-models<br/>Space HF + test de fumée"]
+  pub --> dep["deploy<br/>env ml-models<br/>Space HF (Gradio) + test de fumée"]
 ```
 
 Un échec arrête la chaîne : pas d'image si la non-régression échoue, pas de déploiement
-sans image scannée et taguée. Le Space exécute l'image **épinglée par digest**
-(`FROM ghcr.io/…@sha256:…`) : exactement les octets scannés et attestés, rien n'est
-reconstruit. Le déploiement n'est validé que si l'URL publique annonce la nouvelle version
-(`/health`) et répond à une prédiction authentifiée.
+sans image scannée et taguée. Le SDK Docker des Spaces étant payant, le Space est en SDK
+**Gradio** (#29) : `scripts/deploy_space.py` y pousse un `app.py` qui lance l'API FastAPI
+(uvicorn, port 7860), un `requirements.txt` aux versions exactes de `uv.lock` qui installe
+le paquet **depuis le tag**, `packages.txt` (libgomp1) et `model_revision.txt`. Le
+déploiement n'est validé que si l'URL publique annonce la nouvelle version (`/health`) et
+répond à une prédiction authentifiée. L'image GHCR reste publiée pour un hébergeur Docker.
 
 ## Secrets
 
