@@ -166,6 +166,9 @@ MOUNT_OPTIONS: dict[str, Any] = {
     "js": FORCE_LIGHT,
     "footer_links": [],
     "run_history": False,
+    # Rendu côté client : sur un Space, GRADIO_SSR_MODE=true lancerait au montage un serveur
+    # Node sur le premier port libre à partir de 7860, avant uvicorn (Errno 98, #42).
+    "ssr_mode": False,
 }
 
 
