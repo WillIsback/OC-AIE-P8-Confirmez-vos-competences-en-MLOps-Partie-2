@@ -71,8 +71,14 @@ mesurée. Architecture : `docs/architecture.md`.
   - tests : non-régression des scores contre P6 (test le plus important du projet) ;
   - CI/CD : le service télécharge le dépôt HF à une révision figée (`model_revision.txt`)
     **au démarrage**, pas au build (William, 22/11/2026) : l'image GHCR est publique et ne
-    doit contenir aucune donnée ; la même image, construite une fois, part sur le Space ;
-    un Hub injoignable ou un fichier altéré empêche le démarrage (échec visible).
+    doit contenir aucune donnée ; un Hub injoignable ou un fichier altéré empêche le
+    démarrage (échec visible).
+  - déploiement (#29, William, 22/11/2026) : le SDK Docker des Spaces étant payant, le
+    Space est en SDK **Gradio** ; son `app.py` lance l'API FastAPI (uvicorn, port 7860).
+    Le Space reconstruit l'environnement : même code (paquet installé depuis le tag) et
+    mêmes versions (`requirements.txt` exporté de `uv.lock`), mais pas la même image que
+    GHCR. L'image Docker reste construite, scannée, attestée et publiée à chaque release,
+    prête pour un hébergeur Docker.
     **Dépôt privé** (William, 22/11/2026) : l'échantillon de clients vient des données
     Kaggle Home Credit, dont le règlement interdit la redistribution ; téléchargement
     authentifié par le secret `HF_TOKEN`, déjà nécessaire au déploiement des Spaces ;
@@ -212,6 +218,8 @@ mesurée. Architecture : `docs/architecture.md`.
   - tests : la non-régression des scores (ADR-002) garde chaque optimisation, avec une
     tolérance définie pour ONNX ;
   - rapport : tableau avant/après issu du banc, confirmé par les percentiles du Space ;
+    le Space (SDK Gradio, #29) ne fait pas tourner l'image Docker du banc : mêmes versions
+    de bibliothèques, mais système et matériel différents, d'où la confirmation séparée ;
   - soutenance : pourquoi un p95 plutôt qu'une moyenne, pourquoi ne pas comparer des
     mesures prises sur CPU partagé.
 - **Indicateurs** : mission, étape 4 (gain démontré, absence de régression,
