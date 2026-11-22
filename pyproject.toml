@@ -34,6 +34,7 @@ dev = [
     "pyyaml",
     "pandas-stubs>=3.1.0.261029",
     "debugpy>=1.8.22",
+    "pyarrow>=26.0.1",
 ]
 
 [build-system]
