@@ -121,3 +121,13 @@ def test_get_model_charge_une_seule_fois(
     assert premier is second
     assert len(appels) == 1
     get_model.cache_clear()
+
+
+def test_importance_globale_rang_et_part_du_gain(tiny_artifacts: Path) -> None:
+    m = load_model(tiny_artifacts)
+    imp = m.importance
+    assert set(imp) == set(m.features.model_columns)
+    assert sorted(rank for rank, _ in imp.values()) == [1, 2, 3]
+    assert sum(share for _, share in imp.values()) == pytest.approx(1.0)
+    assert imp["AMT_CREDIT"][0] == 1  # la cible ne dépend que du crédit
+    assert m.importance is imp  # calculée une seule fois

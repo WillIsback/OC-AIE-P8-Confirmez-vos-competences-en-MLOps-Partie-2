@@ -21,7 +21,7 @@ import hashlib
 import json
 import os
 from dataclasses import dataclass
-from functools import lru_cache
+from functools import cached_property, lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -84,6 +84,20 @@ class ScoringModel:
     def version(self) -> str:
         return f"{self.manifest['model_name']} v{self.manifest['model_version']}"
 
+    @cached_property
+    def importance(self) -> dict[str, tuple[int, float]]:
+        """Importance globale par feature : (rang, part du gain total), rang 1 = la plus forte.
+
+        Gain cumulé des coupures du booster à l'entraînement ; calculé une seule fois.
+        """
+        gain = np.asarray(self.booster.feature_importance(importance_type="gain"), dtype=float)
+        total = float(gain.sum()) or 1.0
+        order = np.argsort(-gain, kind="stable")
+        return {
+            self.features.model_columns[i]: (rank, float(gain[i]) / total)
+            for rank, i in enumerate(order, start=1)
+        }
+
     def encode(self, frame: pd.DataFrame) -> np.ndarray:
         """Matrice float64 dans l'ordre des colonnes du modèle."""
         missing = [c for c in self.features.model_columns if c not in frame.columns]
@@ -142,7 +156,12 @@ def load_model(model_dir: Path) -> ScoringModel:
     return ScoringModel(booster, features, float(manifest["threshold"]), manifest)
 
 
+def model_dir() -> Path:
+    """Dossier des artefacts : variable d'environnement `MODEL_DIR`, `artifacts/` sinon."""
+    return Path(os.environ.get("MODEL_DIR", str(DEFAULT_MODEL_DIR)))
+
+
 @lru_cache(maxsize=1)
 def get_model() -> ScoringModel:
     """Modèle du processus : chargé au premier appel, puis réutilisé."""
-    return load_model(Path(os.environ.get("MODEL_DIR", str(DEFAULT_MODEL_DIR))))
+    return load_model(model_dir())
