@@ -123,14 +123,42 @@ jobs:
           fi
           echo "✅ $VERSION > $LAST_TAG"
 
-  # Gates de release propres au projet : ajouter ici les jobs trop lents ou trop
-  # coûteux pour la CI de PR (évaluation de modèle, tests de bout en bout…),
-  # avec `needs: [detect, gate-version-consistency]`, puis les ajouter aux `needs`
-  # du job suivant. Exemple : gate-evaluation-rag du projet P7.
+  # Gate propre au projet : non-régression du modèle sur les vrais artefacts. Elle exige
+  # HF_TOKEN (dépôt modèle privé), secret de l'environnement ml-models limité à main :
+  # elle ne peut donc pas tourner en CI de PR. Rien n'est publié ni déployé si elle échoue.
+  gate-non-regression:
+    name: gate-non-regression (vrais artefacts)
+    needs: [detect, gate-version-consistency]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: ml-models
+    steps:
+      - name: Checkout du code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Installer uv (cache des dépendances)
+        uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+        with:
+          version: "0.13.7"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Dépendances (lockfile vérifié)
+        run: uv sync --locked
+
+      - name: Artefacts à la révision figée (model_revision.txt)
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: uv run python scripts/model_hub.py fetch
+
+      - name: Non-régression contre P6 et API sur 1 000 clients réels
+        run: uv run pytest -m integration --no-cov
 
   image:
     name: Image Docker (build unique, scan, publication)
-    needs: [detect, gate-version-consistency]
+    needs: [detect, gate-version-consistency, gate-non-regression]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -140,6 +168,7 @@ jobs:
       attestations: write
     outputs:
       image: ${{ steps.push.outputs.image }}
+      digest: ${{ steps.push.outputs.digest }}
     steps:
       - name: Checkout du code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -289,3 +318,42 @@ jobs:
               --title "Confirmez vos compétences en MLOps (Partie 2/2) $VERSION" --notes-file changelog.md --latest
           fi
           echo "✅ Release $VERSION publiée."
+
+  # Déploiement sur le Space HF : la même image (épinglée par digest) que celle scannée,
+  # attestée et publiée ; vérifiée ensuite sur l'URL publique (version + prédiction).
+  deploy:
+    name: Déploiement sur le Space Hugging Face
+    needs: [detect, image, publish]
+    if: github.event_name == 'push' || !inputs.dry_run
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    environment:
+      name: ml-models
+      url: https://huggingface.co/spaces/WillisBack/credit-scoring-api
+    steps:
+      - name: Checkout du code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Installer uv (cache des dépendances)
+        uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+        with:
+          version: "0.13.7"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Dépendances (lockfile vérifié)
+        run: uv sync --locked
+
+      - name: Déployer puis vérifier l'URL publique
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          SPACE_HF_TOKEN: ${{ secrets.SPACE_HF_TOKEN }}
+          API_KEY: ${{ secrets.API_KEY }}
+          IMAGE: ${{ needs.image.outputs.image }}
+          DIGEST: ${{ needs.image.outputs.digest }}
+          VERSION: ${{ needs.detect.outputs.version }}
+        run: |
+          set -euo pipefail
+          uv run python scripts/deploy_space.py --image "${IMAGE%:*}@${DIGEST}" --version "$VERSION"
