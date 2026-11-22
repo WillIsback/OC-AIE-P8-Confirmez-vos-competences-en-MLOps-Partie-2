@@ -6,7 +6,9 @@ Variables d'environnement : `HF_TOKEN` (écriture sur le Space), `API_KEY` et
 `SPACE_HF_TOKEN` (lecture du dépôt modèle privé), poussés comme secrets du Space.
 
 Étapes :
-1. crée le Space Docker s'il n'existe pas ;
+1. crée le Space s'il n'existe pas, et le ramène sur le matériel `cpu-basic` (gratuit) :
+   un Space Gradio peut être créé sur ZeroGPU, qui arrête toute app sans fonction
+   `@spaces.GPU` (#36) ;
 2. pousse les secrets **avant** les fichiers, pour que le build qui suit les trouve ;
 3. pousse les fichiers du Space : le SDK Docker étant payant, le Space est en SDK Gradio
    et son `app.py` lance l'API FastAPI (uvicorn, port 7860). `requirements.txt` reprend les
@@ -42,6 +44,7 @@ SPACE_ID = "WillisBack/credit-scoring-api"
 GIT_URL = "https://github.com/WillIsback/OC-AIE-P8-Confirmez-vos-competences-en-MLOps-Partie-2"
 GRADIO_VERSION = "6.32.0"  # le Space installe gradio[oauth,mcp] : pydantic <= 2.12.5 (#31)
 _TAG = re.compile(r"v\d+\.\d+\.\d+")
+HARDWARE = "cpu-basic"
 ERROR_STAGES = {"BUILD_ERROR", "RUNTIME_ERROR", "CONFIG_ERROR", "NO_APP_FILE"}
 
 README = """---
@@ -117,13 +120,16 @@ def space_files(version: str, requirements: str, revision: str) -> dict[str, byt
 
 
 def deploy(api: Any, repo_id: str, files: dict[str, bytes], secrets: dict[str, str]) -> None:
-    """Crée le Space si besoin, pousse les secrets puis les fichiers (déclenche le build)."""
-    from huggingface_hub import CommitOperationAdd
+    """Crée le Space si besoin, fixe le matériel CPU, pousse les secrets puis les fichiers."""
+    from huggingface_hub import CommitOperationAdd, SpaceHardware
 
     empty = [k for k, v in secrets.items() if not v]
     if empty:
         raise ValueError(f"Secrets vides : {', '.join(empty)}")
     api.create_repo(repo_id=repo_id, repo_type="space", space_sdk="gradio", exist_ok=True)
+    requested = api.get_space_runtime(repo_id).requested_hardware
+    if getattr(requested, "value", requested) != HARDWARE:  # str en pratique, enum typé
+        api.request_space_hardware(repo_id, SpaceHardware(HARDWARE))
     for key, value in secrets.items():
         api.add_space_secret(repo_id, key, value)
     api.create_commit(

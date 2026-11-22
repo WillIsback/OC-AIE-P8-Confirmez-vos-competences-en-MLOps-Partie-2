@@ -13,9 +13,15 @@ SPACE = "WillisBack/credit-scoring-api"
 
 
 class FakeApi:
-    def __init__(self, stages: list[str], host: str = "https://willisback-credit.hf.space"):
+    def __init__(
+        self,
+        stages: list[str],
+        host: str = "https://willisback-credit.hf.space",
+        hardware: str = "cpu-basic",
+    ):
         self.stages = stages
         self.host = host
+        self.hardware = hardware
         self.calls: list[tuple[str, Any]] = []
 
     def create_repo(self, **kwargs: Any) -> None:
@@ -30,7 +36,10 @@ class FakeApi:
 
     def get_space_runtime(self, repo_id: str) -> Any:
         stage = self.stages.pop(0) if len(self.stages) > 1 else self.stages[0]
-        return SimpleNamespace(stage=stage)
+        return SimpleNamespace(stage=stage, requested_hardware=self.hardware)
+
+    def request_space_hardware(self, repo_id: str, hardware: str) -> None:
+        self.calls.append(("hardware", getattr(hardware, "value", hardware)))
 
     def space_info(self, repo_id: str) -> Any:
         return SimpleNamespace(host=self.host)
@@ -80,6 +89,15 @@ def test_deploiement_pousse_les_secrets_avant_les_fichiers() -> None:
     assert api.calls[0][1]["space_sdk"] == "gradio"
     assert {c[1] for c in api.calls if c[0] == "secret"} == {"API_KEY", "HF_TOKEN"}
     assert set(api.calls[3][1]) == set(files)
+
+
+def test_space_zerogpu_ramene_sur_cpu_avant_le_build() -> None:
+    # ZeroGPU arrête l'app sans fonction @spaces.GPU (#36) : CPU gratuit demandé avant le commit
+    api = FakeApi(["RUNNING"], hardware="zero-a10g")
+    ds.deploy(api, SPACE, ds.space_files("v0.2.4", REQS, REV), {"API_KEY": "k", "HF_TOKEN": "t"})
+    kinds = [c[0] for c in api.calls]
+    assert kinds == ["create_repo", "hardware", "secret", "secret", "commit"]
+    assert api.calls[1][1] == "cpu-basic"
 
 
 def test_secret_vide_refuse_avant_tout_appel() -> None:
