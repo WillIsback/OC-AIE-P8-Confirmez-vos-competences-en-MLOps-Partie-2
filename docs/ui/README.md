@@ -1,0 +1,56 @@
+# Interface de démonstration (Gradio)
+
+Racine du Space : **https://willisback-credit-scoring-api.hf.space/** (#40). Design :
+`docs/superpowers/specs/2026-11-22-interface-gradio-design.md`.
+
+## Parcours
+
+1. **Choisir un client** parmi les 1 000 clients de démo (jeu de test Kaggle) : liste avec
+   recherche, ou « Client au hasard ». Le score s'affiche aussitôt.
+2. **Lire le résultat** : décision colorée, probabilité de défaut, barre avec le repère du
+   seuil métier (53,5 %), et tableau des avertissements (valeur hors des bornes du jeu
+   d'entraînement, rang et part d'importance de la feature).
+3. **Éprouver le contrat de l'API** en modifiant une valeur lisible (montant du crédit,
+   taille du foyer, heure de la demande, profession, e-mail, âge du véhicule), puis
+   « Scorer le client » ; « Rétablir » recharge les valeurs d'origine.
+
+| Sélection | Avertissement (crédit à 5 000 000) | Refus 422 (foyer de 0 personne) |
+|---|---|---|
+| ![sélection](img/01-selection.png) | ![avertissement](img/02-avertissement.png) | ![refus](img/03-refus-422.png) |
+
+L'interface ne bloque aucune saisie : c'est l'API qui refuse, et l'interface affiche son
+erreur 422 en clair (champ, règle, valeur reçue).
+
+**Limite affichée à l'écran** : les features `autoFE_f_*`, les plus importantes, sont des
+combinaisons calculées en amont et ne sont pas recalculées quand on modifie une feature
+brute. La modification sert à démontrer le contrat (avertissement, refus), pas à mesurer
+la sensibilité du score.
+
+## Architecture
+
+```mermaid
+flowchart LR
+  nav["navigateur"] --> ui["Gradio monté à « / »<br/>(gr.mount_gradio_app)"]
+  ui -- "httpx, transport ASGI<br/>X-API-Key (serveur) + X-Client: ui-demo" --> mw["middleware de journalisation"]
+  mw --> api["POST /predict, /predict/{id}"]
+  mw --> logs[("prediction_logs<br/>source = ui-demo")]
+```
+
+- **Même chemin que la production** : chaque score passe par la vraie route `/predict`
+  (validation, journalisation, avertissements), sans réseau.
+- **Clé côté serveur** : Space de démonstration (décision de William) ; la clé n'atteint
+  jamais le navigateur. Les appels directs à `/predict` (curl, Swagger) l'exigent toujours.
+- **Trafic distingué** : `source = ui-demo` dans les journaux ; les analyses de
+  production filtrent `source = 'api'` (`docs/monitoring.md`).
+- **Pas d'API Gradio publique** : événements en `api_visibility="private"`, historique des
+  entrées désactivé.
+
+## Lancer en local
+
+```bash
+uv sync                      # Gradio est dans le groupe dev et l'extra « ui »
+MODEL_DIR=artifacts API_KEY=dev uv run uvicorn credit_scoring.api.app:app
+# → http://127.0.0.1:8000/ (interface) et /docs (API)
+```
+
+L'image Docker n'installe pas l'extra `ui` : elle sert la page HTML de l'API à la racine.

@@ -11,6 +11,7 @@ dans `docs/spec.md`. Documentation interactive : `/docs` (Swagger, avec exemples
 | `POST /predict` | oui | score d'un client décrit par ses 122 features |
 | `POST /predict/{sk_id_curr}` | oui | démo : client de l'échantillon (1 000 clients du test), **même validation** |
 | `GET /docs`, `/openapi.json` | non | documentation |
+| `GET /` | non | interface de démonstration Gradio (Space, extra `ui`) ; page HTML sinon — `docs/ui/README.md` |
 
 Réponse 200 :
 

@@ -198,6 +198,7 @@ def build_ui(
                 result = gr.HTML()
                 warnings = gr.Dataframe(
                     headers=["Feature", "Valeur", "Bornes (train)", "Rang", "Part"],
+                    column_widths=["26%", "18%", "30%", "13%", "13%"],
                     label="Avertissements (hors des bornes du jeu d'entraînement)",
                     interactive=False,
                     wrap=True,
