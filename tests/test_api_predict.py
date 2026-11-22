@@ -10,6 +10,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
+from credit_scoring import hub
 from credit_scoring.api.app import app
 from credit_scoring.api.features_schema import EXAMPLE_CLIENT, NULLABLE_FEATURES
 from credit_scoring.model import ArtifactError, get_model
@@ -270,7 +271,13 @@ def test_demarrage_refuse_sans_cle_configuree(
         pass
 
 
-def test_demarrage_refuse_sans_artefacts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_demarrage_refuse_si_le_hub_est_injoignable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def hub_injoignable(**_: Any) -> str:
+        raise ArtifactError("Hub injoignable (simulé)")
+
+    monkeypatch.setattr(hub, "snapshot_download", hub_injoignable)
     monkeypatch.setenv("MODEL_DIR", str(tmp_path))
     monkeypatch.setenv("API_KEY", API_KEY)
     get_model.cache_clear()

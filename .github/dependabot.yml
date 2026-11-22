@@ -27,6 +27,10 @@ updates:
     labels: ["type:chore", "dependencies"]
     commit-message:
       prefix: "chore(docker)"
+    ignore:
+      # Python suit .python-version (CI et image sur la même mineure) : pas de saut 3.12 → 3.x.
+      - dependency-name: "python"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
 
   - package-ecosystem: "github-actions"
     directory: "/"

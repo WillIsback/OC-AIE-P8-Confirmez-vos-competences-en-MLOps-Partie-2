@@ -20,18 +20,11 @@ from huggingface_hub import HfApi, snapshot_download
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+from credit_scoring.hub import REPO_ID, pinned_revision  # noqa: E402
 from credit_scoring.model import load_model  # noqa: E402
 
-REPO_ID = "WillisBack/home-credit-scoring"
 REVISION_FILE = ROOT / "model_revision.txt"
 DEFAULT_DIR = ROOT / "artifacts"
-
-
-def pinned_revision() -> str:
-    revision = REVISION_FILE.read_text(encoding="utf-8").strip()
-    if len(revision) != 40:
-        raise SystemExit(f"{REVISION_FILE.name} doit contenir un SHA de commit complet")
-    return revision
 
 
 def fetch(dest: Path, revision: str) -> None:
@@ -66,7 +59,7 @@ def main() -> int:
     p.add_argument("--private", action="store_true")
     args = parser.parse_args()
     if args.command == "fetch":
-        fetch(args.dest, pinned_revision())
+        fetch(args.dest, pinned_revision(REVISION_FILE))
     else:
         publish(args.source, args.private)
     return 0
