@@ -20,6 +20,12 @@ dependencies = [
     "uvicorn",
 ]
 
+[project.optional-dependencies]
+ui = [
+    "gradio==6.32.0",
+    "httpx>=0.28.1",
+]
+
 [dependency-groups]
 archive = [
     "pyarrow>=26.0.1",
@@ -35,6 +41,7 @@ dev = [
     "pandas-stubs>=3.1.0.261029",
     "debugpy>=1.8.22",
     "pyarrow>=26.0.1",
+    "gradio==6.32.0",
 ]
 
 [build-system]
