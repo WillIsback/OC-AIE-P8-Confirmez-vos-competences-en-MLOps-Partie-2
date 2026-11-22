@@ -17,3 +17,9 @@ data
 reports
 *.md
 !README.md
+artifacts
+exercices
+.oc
+scripts
+notebooks
+mlruns

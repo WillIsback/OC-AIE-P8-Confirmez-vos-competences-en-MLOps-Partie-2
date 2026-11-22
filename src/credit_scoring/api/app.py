@@ -17,18 +17,20 @@ from credit_scoring.api.features_schema import EXAMPLE_CLIENT
 from credit_scoring.api.schemas import ClientFeatures, ErrorMessage, PredictionResponse
 from credit_scoring.api.scoring import load_demo_clients, score
 from credit_scoring.api.security import configured_api_key, require_api_key
+from credit_scoring.hub import ensure_artifacts
 from credit_scoring.model import ScoringModel, get_model, model_dir
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Au démarrage : clé d'API, modèle (chargé une seule fois) et clients de démo.
+    """Au démarrage : clé d'API, artefacts, modèle (chargé une seule fois), clients de démo.
 
     Une erreur ici (clé absente, artefacts absents ou altérés) empêche le service de
     démarrer : mieux vaut un Space en échec visible qu'une API qui répond avec un mauvais
     modèle.
     """
     app.state.api_key = configured_api_key()
+    ensure_artifacts(model_dir())  # image sans données : téléchargées au 1er démarrage
     app.state.model = get_model()
     _ = app.state.model.importance  # calculée ici plutôt qu'à la première requête
     app.state.demo_clients = load_demo_clients(model_dir())

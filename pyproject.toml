@@ -8,6 +8,7 @@ authors = [{ name = "William Derue" }]
 requires-python = ">=3.12"
 dependencies = [
     "fastapi",
+    "huggingface-hub>=2.4.0",
     "lightgbm>=4.7.0",
     "numpy>=2.5.5",
     "pandas>=3.1.1",
@@ -24,7 +25,6 @@ dev = [
     "ruff",
     "types-pyyaml",
     "pyyaml",
-    "huggingface-hub>=2.4.0",
     "pandas-stubs>=3.1.0.261029",
 ]
 
@@ -67,7 +67,7 @@ files = ["src", "tests", "scripts"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
-addopts = "-ra --strict-markers --cov=credit_scoring --cov-report=term-missing --cov-fail-under=80"
+addopts = "-ra --strict-markers --cov=credit_scoring --cov-branch --cov-report=term-missing --cov-fail-under=80"
 markers = [
     "integration: appelle un service réel (exclu de la CI de PR)",
 ]

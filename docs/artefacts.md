@@ -20,7 +20,8 @@ flowchart LR
   p6[("Registry P6<br/>home-credit-serving v2")] -->|"scripts/export_p6_artifacts.py<br/>(environnement P6)"| art["artifacts/"]
   art -->|"validation : 48 744 clients,<br/>écart max 0"| art
   art -->|"model_hub.py publish"| hub[("Hub HF<br/>WillisBack/home-credit-scoring")]
-  hub -->|"model_hub.py fetch<br/>révision figée (model_revision.txt)"| svc["service / CI / image Docker"]
+  hub -->|"au démarrage du conteneur (lifespan)<br/>révision figée, HF_TOKEN"| svc["service (image publique,<br/>sans données)"]
+  hub -->|"model_hub.py fetch"| dev["poste de dev / CI (main)"]
 ```
 
 1. **Export** (une fois par nouvelle version du modèle) : le script lit le Registry de P6,
@@ -32,7 +33,9 @@ flowchart LR
    `model_revision.txt`, versionné avec le code.
 3. **Téléchargement** à cette révision exacte, jamais `main` : un même commit du code
    sert toujours les mêmes octets du modèle. Le chargement refuse tout fichier absent ou
-   dont l'empreinte diffère du manifeste.
+   dont l'empreinte diffère du manifeste. Dans l'image Docker, c'est le `lifespan` qui
+   télécharge (`credit_scoring.hub.ensure_artifacts`) au premier démarrage : l'image GHCR
+   est publique et ne contient que le code et `model_revision.txt`.
 
 ## Garanties
 
