@@ -104,7 +104,19 @@ mesurée. Architecture : `docs/architecture.md`.
   - monitoring : les 401 comptent dans le taux d'erreur ;
   - soutenance : en vraie production, passerelle (mTLS ou OAuth2 client-credentials),
     rotation des clés, limitation de débit.
-- **Indicateurs de la fiche** : scripts API (erreurs appréhendées) ; tests (pertinence).
+- **Routes de documentation publiques** (`/docs`, `/openapi.json`) — décision de William
+  (22/11/2026), maintenue **à des fins de démonstration pour la soutenance** :
+  - contrepartie assumée : le schéma OpenAPI expose le contrat que le 401 protège sur
+    `/predict` (122 noms de features, catégories acceptées, plages des règles métier,
+    client d'exemple synthétique) ; aucun score ni donnée client n'est accessible sans clé ;
+  - pourquoi : la démo imposée (« une requête type à l'API déployée et sa réponse ») se fait
+    depuis Swagger, sans outillage côté évaluatrice, et la documentation des routes est un
+    indicateur de la fiche ;
+  - en vraie production : `/docs` et `/openapi.json` derrière la clé ou la passerelle
+    (`FastAPI(docs_url=None, openapi_url=None)` en production, ou une dépendance de
+    sécurité sur ces routes), le contrat étant remis à Crédit Express hors bande.
+- **Indicateurs de la fiche** : scripts API (erreurs appréhendées, routes documentées) ;
+  tests (pertinence).
 - **Question d'oral probable** : « Ton API de crédit est publique : qu'est-ce qui empêche
   quelqu'un de l'interroger, et pourquoi ne pas avoir repris le JWT de P5 ? »
 
