@@ -117,9 +117,8 @@ def current_model(request: Request) -> ScoringModel:
 ModelDep = Annotated[ScoringModel, Depends(current_model)]
 
 
-@app.get("/", include_in_schema=False, response_class=HTMLResponse)
 def home() -> str:
-    """Page d'accueil publique : la sonde des Spaces Hugging Face exige un 200 sur la racine."""
+    """Page d'accueil sans interface (image Docker sans Gradio) : 200 sur la racine."""
     return (
         "<!doctype html><html lang='fr'><head><meta charset='utf-8'>"
         "<title>Credit Scoring API</title></head><body>"
@@ -199,3 +198,19 @@ def predict_demo(sk_id_curr: int, request: Request, model: ModelDep) -> Predicti
             [{**e, "loc": ("sample_clients", sk_id_curr, *e["loc"])} for e in exc.errors()]
         ) from exc
     return _scored(request, model, client, sk_id_curr=sk_id_curr)
+
+
+def install_home(target: FastAPI) -> None:
+    """Racine : l'interface Gradio si elle est installée (Space), sinon la page HTML."""
+    try:
+        from credit_scoring.ui import mount_ui
+    except ModuleNotFoundError as exc:
+        if exc.name != "gradio":  # Gradio présent mais cassé : l'échec doit se voir
+            raise
+        # Image Docker : pas d'extra `ui`.
+        target.add_api_route("/", home, include_in_schema=False, response_class=HTMLResponse)
+        return
+    mount_ui(target)
+
+
+install_home(app)  # en dernier : les routes de l'API passent avant le montage à « / »

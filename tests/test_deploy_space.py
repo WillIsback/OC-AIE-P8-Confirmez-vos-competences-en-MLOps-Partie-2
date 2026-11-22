@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from types import SimpleNamespace
 from typing import Any
 
@@ -99,12 +100,28 @@ def test_materiel_du_space_jamais_modifie() -> None:
 
 
 def test_app_annonce_l_api_a_zerogpu() -> None:
-    # ZeroGPU arrête le Space sans « startup report » : le middleware l'envoie au démarrage
-    app_py = ds.space_files("v0.2.5", REQS, REV)["app.py"].decode()
-    assert "ZeroGPUMiddleware(app)" in app_py
-    assert "@spaces.GPU\ndef " in app_py  # étape 3 de la doc ZeroGPU, jamais appelée
+    # spaces importé avant l'app : il remplace gr.mount_gradio_app, qui ajoute alors
+    # ZeroGPUMiddleware (startup report) ; l'envelopper à la main l'enverrait deux fois.
+    app_py = ds.space_files("v0.3.0", REQS, REV)["app.py"].decode()
     assert app_py.index("import spaces") < app_py.index("credit_scoring")
+    assert "@spaces.GPU\ndef " in app_py
+    assert "ZeroGPUMiddleware(app)" not in app_py
+    assert "from spaces.zero import" not in app_py
+    assert "access_log=False" in app_py  # logs d'accès : chemin réel /predict/<SK_ID_CURR>
     compile(app_py, "app.py", "exec")
+
+
+def test_export_avec_extra_ui(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[list[str]] = []
+
+    def fake_run(cmd: list[str], **kwargs: Any) -> Any:
+        seen.append(cmd)
+        return SimpleNamespace(stdout="gradio==6.32.0\n")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    assert ds.locked_requirements() == "gradio==6.32.0\n"
+    cmd = seen[0]
+    assert cmd[cmd.index("--extra") + 1] == "ui"
 
 
 def test_secret_vide_refuse_avant_tout_appel() -> None:
