@@ -63,7 +63,7 @@ def test_fichiers_du_space_gradio() -> None:
     assert f"sdk_version: {ds.GRADIO_VERSION}" in readme
     assert "app_file: app.py" in readme
     assert 'python_version: "3.12"' in readme
-    assert "credit_scoring.api.app:app" in files["app.py"].decode()
+    assert "from credit_scoring.api.app import app" in files["app.py"].decode()
     assert files["packages.txt"].decode().split() == ["libgomp1"]
     assert files["model_revision.txt"].decode().strip() == REV
 
@@ -91,13 +91,20 @@ def test_deploiement_pousse_les_secrets_avant_les_fichiers() -> None:
     assert set(api.calls[3][1]) == set(files)
 
 
-def test_space_zerogpu_ramene_sur_cpu_avant_le_build() -> None:
-    # ZeroGPU arrête l'app sans fonction @spaces.GPU (#36) : CPU gratuit demandé avant le commit
+def test_materiel_du_space_jamais_modifie() -> None:
+    # ZeroGPU est le choix de William ; le rétrograder exige PRO (402, #38)
     api = FakeApi(["RUNNING"], hardware="zero-a10g")
-    ds.deploy(api, SPACE, ds.space_files("v0.2.4", REQS, REV), {"API_KEY": "k", "HF_TOKEN": "t"})
-    kinds = [c[0] for c in api.calls]
-    assert kinds == ["create_repo", "hardware", "secret", "secret", "commit"]
-    assert api.calls[1][1] == "cpu-basic"
+    ds.deploy(api, SPACE, ds.space_files("v0.2.5", REQS, REV), {"API_KEY": "k", "HF_TOKEN": "t"})
+    assert "hardware" not in [c[0] for c in api.calls]
+
+
+def test_app_annonce_l_api_a_zerogpu() -> None:
+    # ZeroGPU arrête le Space sans « startup report » : le middleware l'envoie au démarrage
+    app_py = ds.space_files("v0.2.5", REQS, REV)["app.py"].decode()
+    assert "ZeroGPUMiddleware(app)" in app_py
+    assert "@spaces.GPU\ndef " in app_py  # étape 3 de la doc ZeroGPU, jamais appelée
+    assert app_py.index("import spaces") < app_py.index("credit_scoring")
+    compile(app_py, "app.py", "exec")
 
 
 def test_secret_vide_refuse_avant_tout_appel() -> None:

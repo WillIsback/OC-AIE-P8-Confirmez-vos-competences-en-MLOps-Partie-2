@@ -22,9 +22,11 @@ Un échec arrête la chaîne : pas d'image si la non-régression échoue, pas de
 sans image scannée et taguée. Le SDK Docker des Spaces étant payant, le Space est en SDK
 **Gradio** (#29) : `scripts/deploy_space.py` y pousse un `app.py` qui lance l'API FastAPI
 (uvicorn, port 7860), un `requirements.txt` aux versions exactes de `uv.lock` qui installe
-le paquet **depuis le tag**, `packages.txt` (libgomp1) et `model_revision.txt`. Il fixe aussi
-le matériel `cpu-basic` (gratuit) : un Space Gradio peut naître sur ZeroGPU, qui arrête toute
-application sans fonction `@spaces.GPU` (#36). Le
+le paquet **depuis le tag**, `packages.txt` (libgomp1) et `model_revision.txt`. Le Space est
+sur le matériel **ZeroGPU** (gratuit, réservé au SDK Gradio), qui arrête toute application
+qui ne s'annonce pas au démarrage : `app.py` importe `spaces`, déclare une fonction
+`@spaces.GPU` (jamais appelée : le scoring LightGBM reste sur CPU, sans quota consommé) et
+sert l'API derrière `ZeroGPUMiddleware`, qui envoie le « startup report » (#38). Le
 déploiement n'est validé que si l'URL publique annonce la nouvelle version (`/health`) et
 répond à une prédiction authentifiée. L'image GHCR reste publiée pour un hébergeur Docker.
 
