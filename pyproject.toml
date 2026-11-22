@@ -75,6 +75,8 @@ select = ["E", "F", "W", "I", "UP", "B", "SIM", "S", "N", "RUF"]
 # Tirage d'échantillons reproductible (graine), sans usage cryptographique
 "scripts/simulate_traffic.py" = ["S311"]
 "tests/test_simulate_traffic.py" = ["S311"]
+"src/credit_scoring/ui/app.py" = ["S311"]  # bouton « client au hasard »
+"tests/test_ui_app.py" = ["S311"]
 # Noms des features du modèle (OpenFE : autoFE_f_*), imposés par P6
 "src/credit_scoring/api/features_schema.py" = ["N815"]
 
