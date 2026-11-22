@@ -95,6 +95,13 @@ jobs:
         with:
           context: .
           push: false
+          load: true
+          tags: credit-scoring:ci
           build-args: |
             VERSION=0.0.0.dev0
           cache-from: type=gha,scope=image
+
+      - name: Test de fumée (dépendances système de l'image)
+        # Importer l'application charge LightGBM et ses bibliothèques natives (libgomp) :
+        # une image qui se construit mais ne démarre pas échoue ici, pas sur le Space.
+        run: docker run --rm credit-scoring:ci python -c "import credit_scoring.api.app"
