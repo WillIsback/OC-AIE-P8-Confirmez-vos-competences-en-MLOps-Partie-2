@@ -6,14 +6,14 @@ Variables d'environnement : `HF_TOKEN` (écriture sur le Space), `API_KEY` et
 `SPACE_HF_TOKEN` (lecture du dépôt modèle privé), poussés comme secrets du Space.
 
 Étapes :
-1. crée le Space s'il n'existe pas, et le ramène sur le matériel `cpu-basic` (gratuit) :
-   un Space Gradio peut être créé sur ZeroGPU, qui arrête toute app sans fonction
-   `@spaces.GPU` (#36) ;
+1. crée le Space s'il n'existe pas (son matériel, ZeroGPU, n'est jamais modifié) ;
 2. pousse les secrets **avant** les fichiers, pour que le build qui suit les trouve ;
 3. pousse les fichiers du Space : le SDK Docker étant payant, le Space est en SDK Gradio
-   et son `app.py` lance l'API FastAPI (uvicorn, port 7860). `requirements.txt` reprend les
-   versions exactes de `uv.lock` et installe le paquet **depuis le tag** : même code et
-   mêmes versions que la release, environnement reconstruit par le Space (#29) ;
+   et son `app.py` lance l'API FastAPI (uvicorn, port 7860) derrière `ZeroGPUMiddleware`,
+   qui envoie à ZeroGPU le « startup report » sans lequel il arrête le Space (#38).
+   `requirements.txt` reprend les versions exactes de `uv.lock` et installe le paquet
+   **depuis le tag** : même code et mêmes versions que la release, environnement
+   reconstruit par le Space (#29) ;
 4. attend que le Space soit `RUNNING` (échec immédiat sur une erreur de build ou
    d'exécution) ;
 5. test de fumée sur l'URL publique : `/health` doit annoncer la version déployée, et une
@@ -44,7 +44,6 @@ SPACE_ID = "WillisBack/credit-scoring-api"
 GIT_URL = "https://github.com/WillIsback/OC-AIE-P8-Confirmez-vos-competences-en-MLOps-Partie-2"
 GRADIO_VERSION = "6.32.0"  # le Space installe gradio[oauth,mcp] : pydantic <= 2.12.5 (#31)
 _TAG = re.compile(r"v\d+\.\d+\.\d+")
-HARDWARE = "cpu-basic"
 ERROR_STAGES = {"BUILD_ERROR", "RUNTIME_ERROR", "CONFIG_ERROR", "NO_APP_FILE"}
 
 README = """---
@@ -65,14 +64,30 @@ Déployé automatiquement par la CI/CD de {git_url} (version {version}).
 Documentation interactive : `/docs` ; les routes `/predict` exigent l'en-tête `X-API-Key`.
 """
 
-APP_PY = '''"""Point d'entrée du Space (SDK Gradio) : lance l'API FastAPI sur le port du Space."""
+APP_PY = '''"""Point d'entrée du Space (SDK Gradio, matériel ZeroGPU) : lance l'API FastAPI.
+
+ZeroGPU arrête le Space s'il ne reçoit pas de « startup report » au démarrage ; Gradio
+l'envoie depuis `launch()`, ici c'est `ZeroGPUMiddleware` qui l'envoie au démarrage du
+lifespan. Sans ZeroGPU (`SPACES_ZERO_GPU` absent), le middleware laisse tout passer.
+Le scoring (LightGBM) reste sur CPU : aucun quota GPU n'est consommé.
+"""
 
 import os
 
+import spaces  # en premier : active le mode ZeroGPU
 import uvicorn
+from spaces.zero import ZeroGPUMiddleware
+
+from credit_scoring.api.app import app
+
+
+@spaces.GPU
+def gpu_declaree() -> None:
+    """Fonction GPU déclarée comme l'exige ZeroGPU ; jamais appelée (scoring sur CPU)."""
+
 
 uvicorn.run(
-    "credit_scoring.api.app:app",
+    ZeroGPUMiddleware(app),
     host="0.0.0.0",
     port=int(os.environ.get("GRADIO_SERVER_PORT", "7860")),
 )
@@ -120,16 +135,13 @@ def space_files(version: str, requirements: str, revision: str) -> dict[str, byt
 
 
 def deploy(api: Any, repo_id: str, files: dict[str, bytes], secrets: dict[str, str]) -> None:
-    """Crée le Space si besoin, fixe le matériel CPU, pousse les secrets puis les fichiers."""
-    from huggingface_hub import CommitOperationAdd, SpaceHardware
+    """Crée le Space si besoin, pousse les secrets puis les fichiers (déclenche le build)."""
+    from huggingface_hub import CommitOperationAdd
 
     empty = [k for k, v in secrets.items() if not v]
     if empty:
         raise ValueError(f"Secrets vides : {', '.join(empty)}")
     api.create_repo(repo_id=repo_id, repo_type="space", space_sdk="gradio", exist_ok=True)
-    requested = api.get_space_runtime(repo_id).requested_hardware
-    if getattr(requested, "value", requested) != HARDWARE:  # str en pratique, enum typé
-        api.request_space_hardware(repo_id, SpaceHardware(HARDWARE))
     for key, value in secrets.items():
         api.add_space_secret(repo_id, key, value)
     api.create_commit(
