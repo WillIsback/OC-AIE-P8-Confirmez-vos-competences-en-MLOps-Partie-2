@@ -9,7 +9,7 @@ from typing import Annotated, Any
 
 from fastapi import Body, Depends, FastAPI, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import ValidationError
 
 from credit_scoring import __version__
@@ -101,6 +101,20 @@ def current_model(request: Request) -> ScoringModel:
 
 
 ModelDep = Annotated[ScoringModel, Depends(current_model)]
+
+
+@app.get("/", include_in_schema=False, response_class=HTMLResponse)
+def home() -> str:
+    """Page d'accueil publique : la sonde des Spaces Hugging Face exige un 200 sur la racine."""
+    return (
+        "<!doctype html><html lang='fr'><head><meta charset='utf-8'>"
+        "<title>Credit Scoring API</title></head><body>"
+        "<h1>API de scoring crédit Home Credit</h1>"
+        f"<p>Version {__version__}. Les routes <code>/predict</code> exigent l'en-tête "
+        "<code>X-API-Key</code>.</p>"
+        '<p><a href="/docs">Documentation interactive (Swagger)</a></p>'
+        "</body></html>"
+    )
 
 
 @app.get("/health", tags=["ops"])
