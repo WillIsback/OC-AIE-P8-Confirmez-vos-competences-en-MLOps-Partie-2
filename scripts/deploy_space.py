@@ -2,15 +2,17 @@
 
     uv run python scripts/deploy_space.py --version v0.2.1
 
-Variables d'environnement : `HF_TOKEN` (écriture sur le Space), `API_KEY` et
-`SPACE_HF_TOKEN` (lecture du dépôt modèle privé), poussés comme secrets du Space.
+Variables d'environnement : `HF_TOKEN` (écriture sur le Space) ; `API_KEY`,
+`SPACE_HF_TOKEN` (lecture du dépôt modèle privé) et `DATABASE_URL` (journaux de production,
+#16), poussés comme secrets du Space.
 
 Étapes :
 1. crée le Space s'il n'existe pas (son matériel, ZeroGPU, n'est jamais modifié) ;
 2. pousse les secrets **avant** les fichiers, pour que le build qui suit les trouve ;
 3. pousse les fichiers du Space : le SDK Docker étant payant, le Space est en SDK Gradio
-   et son `app.py` lance l'API FastAPI (uvicorn, port 7860) derrière `ZeroGPUMiddleware`,
-   qui envoie à ZeroGPU le « startup report » sans lequel il arrête le Space (#38).
+   et son `app.py` lance l'API FastAPI et son interface Gradio (uvicorn, port 7860) ; le
+   montage de l'interface, après `import spaces`, ajoute le middleware qui envoie à ZeroGPU
+   le « startup report » sans lequel il arrête le Space (#38, #40).
    `requirements.txt` reprend les versions exactes de `uv.lock` et installe le paquet
    **depuis le tag** : même code et mêmes versions que la release, environnement
    reconstruit par le Space (#29) ;
@@ -64,19 +66,18 @@ Déployé automatiquement par la CI/CD de {git_url} (version {version}).
 Documentation interactive : `/docs` ; les routes `/predict` exigent l'en-tête `X-API-Key`.
 """
 
-APP_PY = '''"""Point d'entrée du Space (SDK Gradio, matériel ZeroGPU) : lance l'API FastAPI.
+APP_PY = '''"""Point d'entrée du Space (SDK Gradio, matériel ZeroGPU) : API FastAPI + interface.
 
-ZeroGPU arrête le Space s'il ne reçoit pas de « startup report » au démarrage ; Gradio
-l'envoie depuis `launch()`, ici c'est `ZeroGPUMiddleware` qui l'envoie au démarrage du
-lifespan. Sans ZeroGPU (`SPACES_ZERO_GPU` absent), le middleware laisse tout passer.
+ZeroGPU arrête le Space s'il ne reçoit pas de « startup report » au démarrage. `spaces`,
+importé en premier, remplace `gr.mount_gradio_app` : le montage de l'interface à « / »
+(#40) ajoute alors `ZeroGPUMiddleware`, qui envoie ce rapport au démarrage du lifespan.
 Le scoring (LightGBM) reste sur CPU : aucun quota GPU n'est consommé.
 """
 
 import os
 
-import spaces  # en premier : active le mode ZeroGPU
+import spaces  # en premier : active le mode ZeroGPU et remplace gr.mount_gradio_app
 import uvicorn
-from spaces.zero import ZeroGPUMiddleware
 
 from credit_scoring.api.app import app
 
@@ -87,9 +88,12 @@ def gpu_declaree() -> None:
 
 
 uvicorn.run(
-    ZeroGPUMiddleware(app),
+    app,
     host="0.0.0.0",
     port=int(os.environ.get("GRADIO_SERVER_PORT", "7860")),
+    # Les logs d'accès montreraient le chemin réel /predict/<SK_ID_CURR> ; la ligne JSON
+    # pseudonymisée de chaque appel (#16) les remplace.
+    access_log=False,
 )
 '''
 
@@ -105,6 +109,8 @@ def locked_requirements() -> str:
             "--no-dev",
             "--no-hashes",
             "--no-emit-project",
+            "--extra",
+            "ui",  # interface Gradio (#40)
             "--quiet",
             "--format",
             "requirements-txt",
@@ -195,11 +201,21 @@ def smoke(url: str, api_key: str, version: str, fetch: Fetch = _urllib_fetch) ->
     expected = version.removeprefix("v")
     if status != 200 or health.get("version") != expected:
         raise RuntimeError(f"/health : {status} {health} (version attendue {expected})")
-    headers = {"X-API-Key": api_key, "Content-Type": "application/json"}
+    # X-Client: ci : le trafic du test de fumée est exclu des analyses de production (#16).
+    headers = {"X-API-Key": api_key, "Content-Type": "application/json", "X-Client": "ci"}
     status, prediction = fetch("POST", f"{url}/predict", headers, smoke_payload())
     if status != 200:
         raise RuntimeError(f"/predict : {status} {prediction}")
     print(f"✅ {url} : v{expected}, prédiction « {prediction.get('decision')} »")
+
+
+def space_secrets() -> dict[str, str]:
+    """Secrets poussés au Space (noms côté Space ; valeurs lues dans l'environnement)."""
+    return {
+        "API_KEY": os.environ.get("API_KEY", ""),
+        "HF_TOKEN": os.environ.get("SPACE_HF_TOKEN", ""),
+        "DATABASE_URL": os.environ.get("DATABASE_URL", ""),
+    }
 
 
 def main() -> int:
@@ -210,10 +226,7 @@ def main() -> int:
     parser.add_argument("--space", default=SPACE_ID)
     args = parser.parse_args()
     api = HfApi()  # HF_TOKEN
-    secrets = {
-        "API_KEY": os.environ.get("API_KEY", ""),
-        "HF_TOKEN": os.environ.get("SPACE_HF_TOKEN", ""),
-    }
+    secrets = space_secrets()
     revision = (ROOT / "model_revision.txt").read_text(encoding="utf-8")
     files = space_files(args.version, locked_requirements(), revision)
     deploy(api, args.space, files, secrets)

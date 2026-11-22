@@ -19,6 +19,10 @@ from credit_scoring.api.scoring import load_demo_clients, score
 from credit_scoring.api.security import configured_api_key, require_api_key
 from credit_scoring.hub import ensure_artifacts
 from credit_scoring.model import ScoringModel, get_model, model_dir
+from credit_scoring.monitoring import record
+from credit_scoring.monitoring.db import database_url, make_engine
+from credit_scoring.monitoring.middleware import PredictionLogMiddleware
+from credit_scoring.monitoring.writer import ProductionLogWriter
 
 
 @asynccontextmanager
@@ -34,7 +38,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.model = get_model()
     _ = app.state.model.importance  # calculée ici plutôt qu'à la première requête
     app.state.demo_clients = load_demo_clients(model_dir())
-    yield
+    url = database_url()
+    engine = make_engine(url) if url else None
+    app.state.log_writer = ProductionLogWriter(engine)  # base absente : stdout seulement
+    app.state.log_writer.start()
+    try:
+        yield
+    finally:
+        app.state.log_writer.stop()  # vide la file avant l'arrêt
+        if engine is not None:
+            engine.dispose()
 
 
 app = FastAPI(
@@ -49,6 +62,7 @@ app = FastAPI(
     ),
     lifespan=lifespan,
 )
+app.add_middleware(PredictionLogMiddleware)
 
 ERRORS_401: dict[int | str, dict[str, Any]] = {
     401: {"model": ErrorMessage, "description": "Clé d'API absente ou invalide"},
@@ -103,9 +117,8 @@ def current_model(request: Request) -> ScoringModel:
 ModelDep = Annotated[ScoringModel, Depends(current_model)]
 
 
-@app.get("/", include_in_schema=False, response_class=HTMLResponse)
 def home() -> str:
-    """Page d'accueil publique : la sonde des Spaces Hugging Face exige un 200 sur la racine."""
+    """Page d'accueil sans interface (image Docker sans Gradio) : 200 sur la racine."""
     return (
         "<!doctype html><html lang='fr'><head><meta charset='utf-8'>"
         "<title>Credit Scoring API</title></head><body>"
@@ -118,9 +131,29 @@ def home() -> str:
 
 
 @app.get("/health", tags=["ops"])
-def health() -> dict[str, str]:
-    """Sonde de vivacité : état et version déployée."""
-    return {"status": "ok", "version": __version__}
+def health(request: Request) -> dict[str, Any]:
+    """Sonde de vivacité : état, version déployée et état de la journalisation."""
+    writer = getattr(request.app.state, "log_writer", None)
+    return {
+        "status": "ok",
+        "version": __version__,
+        "logging": {
+            "database": bool(writer and writer.database),
+            "dropped": writer.dropped if writer else 0,
+        },
+    }
+
+
+def _scored(
+    request: Request, model: ScoringModel, client: ClientFeatures, sk_id_curr: int | None = None
+) -> PredictionResponse:
+    """Score, et dépôt dans `request.state` de ce que le middleware journalise."""
+    timings: dict[str, float] = {}
+    request.state.features = client.model_dump()
+    prediction = score(model, client, sk_id_curr=sk_id_curr, timings=timings)
+    request.state.prediction = prediction
+    request.state.inference_ms = timings.get("inference_ms")
+    return prediction
 
 
 @app.post(
@@ -133,9 +166,10 @@ def health() -> dict[str, str]:
 def predict(
     client: Annotated[ClientFeatures, Body(openapi_examples=PREDICT_EXAMPLES)],
     model: ModelDep,
+    request: Request,
 ) -> PredictionResponse:
     """Score de défaut et décision pour un client décrit par ses 122 features."""
-    return score(model, client)
+    return _scored(request, model, client)
 
 
 @app.post(
@@ -150,6 +184,7 @@ def predict(
 )
 def predict_demo(sk_id_curr: int, request: Request, model: ModelDep) -> PredictionResponse:
     """Démo : score d'un client de l'échantillon (1 000 clients du test), même validation."""
+    request.state.client_ref = record.client_ref(request.app.state.api_key, sk_id_curr)
     raw = request.app.state.demo_clients.get(sk_id_curr)
     if raw is None:
         raise HTTPException(
@@ -162,4 +197,20 @@ def predict_demo(sk_id_curr: int, request: Request, model: ModelDep) -> Predicti
         raise RequestValidationError(
             [{**e, "loc": ("sample_clients", sk_id_curr, *e["loc"])} for e in exc.errors()]
         ) from exc
-    return score(model, client, sk_id_curr=sk_id_curr)
+    return _scored(request, model, client, sk_id_curr=sk_id_curr)
+
+
+def install_home(target: FastAPI) -> None:
+    """Racine : l'interface Gradio si elle est installée (Space), sinon la page HTML."""
+    try:
+        from credit_scoring.ui import mount_ui
+    except ModuleNotFoundError as exc:
+        if exc.name != "gradio":  # Gradio présent mais cassé : l'échec doit se voir
+            raise
+        # Image Docker : pas d'extra `ui`.
+        target.add_api_route("/", home, include_in_schema=False, response_class=HTMLResponse)
+        return
+    mount_ui(target)
+
+
+install_home(app)  # en dernier : les routes de l'API passent avant le montage à « / »

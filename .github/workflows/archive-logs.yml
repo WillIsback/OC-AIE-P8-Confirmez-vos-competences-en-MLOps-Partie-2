@@ -1,0 +1,60 @@
+# Workflow : archivage quotidien des journaux de production (#16, fenêtre glissante).
+# Chaque jour : lignes `prediction_logs` de plus de 30 jours → Parquet dans un dataset
+# Hugging Face privé → suppression dans Neon (seulement après l'envoi réussi).
+# Déclenchement manuel avec une durée courte (ex. 1h) pour la démonstration.
+name: archive-logs
+
+on:
+  schedule:
+    - cron: "0 3 * * *" # 03:00 UTC
+  workflow_dispatch:
+    inputs:
+      older_than:
+        description: "Âge minimal des lignes à archiver (ex. 30d, 12h, 1h)"
+        type: string
+        default: 30d
+      dry_run:
+        description: "Dry-run : compter sans envoyer ni supprimer"
+        type: boolean
+        default: false
+
+concurrency:
+  group: archive-logs
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  archive:
+    name: Archivage des journaux expirés
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    # DATABASE_URL et HF_TOKEN : secrets de l'environnement ml-models (limité à main).
+    environment: ml-models
+    steps:
+      - name: Checkout du code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Installer uv (cache des dépendances)
+        uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+        with:
+          version: "0.13.7"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Dépendances (groupe archive)
+        run: uv sync --locked --no-dev --group archive
+
+      - name: Archiver puis purger
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          OLDER_THAN: ${{ inputs.older_than || '30d' }}
+          DRY_RUN: ${{ inputs.dry_run || false }}
+        run: |
+          args=(--older-than "$OLDER_THAN")
+          if [ "$DRY_RUN" = "true" ]; then args+=(--dry-run); fi
+          uv run --no-sync python scripts/archive_logs.py "${args[@]}"

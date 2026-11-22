@@ -20,7 +20,9 @@ du Hub, à la révision figée de `model_revision.txt`, puis vérifie leurs empr
   embarquées, inutile à l'exécution) ;
 - utilisateur `app` (uid 1000, celui qu'attendent les Spaces Hugging Face) ; le code et
   les dépendances appartiennent à root, seul `/app/artifacts` est inscriptible ;
-- `HEALTHCHECK` sur `/health`, délai de démarrage de 60 s (téléchargement inclus).
+- `HEALTHCHECK` sur `/health`, délai de démarrage de 60 s (téléchargement inclus) ;
+- sans l'extra `ui` : pas de Gradio dans l'image, la racine sert la page HTML de l'API
+  (l'interface de démonstration vit sur le Space, `docs/ui/README.md`).
 
 ## Mesures (22/11/2026, machine de dev)
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from types import SimpleNamespace
 from typing import Any
 
@@ -83,12 +84,12 @@ def test_version_qui_n_est_pas_un_tag_refusee(version: str) -> None:
 def test_deploiement_pousse_les_secrets_avant_les_fichiers() -> None:
     api = FakeApi(["RUNNING"])
     files = ds.space_files("v0.2.1", REQS, REV)
-    ds.deploy(api, SPACE, files, {"API_KEY": "k", "HF_TOKEN": "t"})
+    ds.deploy(api, SPACE, files, {"API_KEY": "k", "HF_TOKEN": "t", "DATABASE_URL": "pg"})
     kinds = [c[0] for c in api.calls]
-    assert kinds == ["create_repo", "secret", "secret", "commit"]  # secrets avant le build
+    assert kinds == ["create_repo", "secret", "secret", "secret", "commit"]  # avant le build
     assert api.calls[0][1]["space_sdk"] == "gradio"
-    assert {c[1] for c in api.calls if c[0] == "secret"} == {"API_KEY", "HF_TOKEN"}
-    assert set(api.calls[3][1]) == set(files)
+    assert {c[1] for c in api.calls if c[0] == "secret"} == {"API_KEY", "HF_TOKEN", "DATABASE_URL"}
+    assert set(api.calls[4][1]) == set(files)
 
 
 def test_materiel_du_space_jamais_modifie() -> None:
@@ -99,12 +100,28 @@ def test_materiel_du_space_jamais_modifie() -> None:
 
 
 def test_app_annonce_l_api_a_zerogpu() -> None:
-    # ZeroGPU arrête le Space sans « startup report » : le middleware l'envoie au démarrage
-    app_py = ds.space_files("v0.2.5", REQS, REV)["app.py"].decode()
-    assert "ZeroGPUMiddleware(app)" in app_py
-    assert "@spaces.GPU\ndef " in app_py  # étape 3 de la doc ZeroGPU, jamais appelée
+    # spaces importé avant l'app : il remplace gr.mount_gradio_app, qui ajoute alors
+    # ZeroGPUMiddleware (startup report) ; l'envelopper à la main l'enverrait deux fois.
+    app_py = ds.space_files("v0.3.0", REQS, REV)["app.py"].decode()
     assert app_py.index("import spaces") < app_py.index("credit_scoring")
+    assert "@spaces.GPU\ndef " in app_py
+    assert "ZeroGPUMiddleware(app)" not in app_py
+    assert "from spaces.zero import" not in app_py
+    assert "access_log=False" in app_py  # logs d'accès : chemin réel /predict/<SK_ID_CURR>
     compile(app_py, "app.py", "exec")
+
+
+def test_export_avec_extra_ui(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[list[str]] = []
+
+    def fake_run(cmd: list[str], **kwargs: Any) -> Any:
+        seen.append(cmd)
+        return SimpleNamespace(stdout="gradio==6.32.0\n")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    assert ds.locked_requirements() == "gradio==6.32.0\n"
+    cmd = seen[0]
+    assert cmd[cmd.index("--extra") + 1] == "ui"
 
 
 def test_secret_vide_refuse_avant_tout_appel() -> None:
@@ -157,6 +174,7 @@ def test_test_de_fumee_verifie_version_et_prediction() -> None:
     ds.smoke("https://x.hf.space", api_key="k", version="v0.2.1", fetch=fetch)
     predict_headers = fetch.seen[1][1]
     assert predict_headers["X-API-Key"] == "k"
+    assert predict_headers["X-Client"] == "ci"  # trafic de CI distingué (#16, A1)
 
 
 def test_test_de_fumee_refuse_une_ancienne_version() -> None:
@@ -179,3 +197,9 @@ def test_test_de_fumee_refuse_une_prediction_en_erreur() -> None:
 def test_corps_de_la_prediction_est_le_client_synthetique() -> None:
     body = json.loads(ds.smoke_payload())
     assert len(body) == 122
+
+
+def test_secrets_du_space(monkeypatch: pytest.MonkeyPatch) -> None:
+    for key, value in {"API_KEY": "k", "SPACE_HF_TOKEN": "t", "DATABASE_URL": "pg"}.items():
+        monkeypatch.setenv(key, value)
+    assert ds.space_secrets() == {"API_KEY": "k", "HF_TOKEN": "t", "DATABASE_URL": "pg"}

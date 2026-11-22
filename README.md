@@ -2,6 +2,11 @@
 
 Mise en production et monitoring du modèle de scoring crédit Home Credit (OC AI Engineer P8)
 
+- **Démo en ligne** : https://willisback-credit-scoring-api.hf.space/ (interface,
+  [docs/ui](docs/ui/README.md)) · API : `/docs`
+- Documentation : [API](docs/api.md) · [journalisation](docs/monitoring.md) ·
+  [CI/CD](docs/cicd.md) · [image Docker](docs/docker.md) · [décisions](docs/spec.md)
+
 ## Démarrage rapide
 
 ```bash

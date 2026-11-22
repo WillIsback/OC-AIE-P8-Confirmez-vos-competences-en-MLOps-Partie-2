@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import time
 from pathlib import Path
 from typing import Any
 
@@ -52,12 +53,18 @@ def out_of_bounds(
 
 
 def score(
-    model: ScoringModel, client: ClientFeatures, sk_id_curr: int | None = None
+    model: ScoringModel,
+    client: ClientFeatures,
+    sk_id_curr: int | None = None,
+    timings: dict[str, float] | None = None,
 ) -> PredictionResponse:
-    """Prédit pour un client déjà validé."""
+    """Prédit pour un client déjà validé ; `timings["inference_ms"]` = `model.predict` seul."""
     values = client.model_dump()
     frame = pd.DataFrame([values], columns=list(FEATURE_ORDER))
+    start = time.perf_counter()
     row = model.predict(frame).iloc[0]
+    if timings is not None:
+        timings["inference_ms"] = (time.perf_counter() - start) * 1000
     return PredictionResponse(
         sk_id_curr=sk_id_curr,
         prob_default=float(row["prob_default"]),
