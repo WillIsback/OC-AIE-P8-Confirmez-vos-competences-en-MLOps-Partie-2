@@ -1,6 +1,6 @@
-"""Déploie une image publiée sur GHCR vers le Space Hugging Face, puis la vérifie (#15).
+"""Déploie une version taguée sur le Space Hugging Face (SDK Gradio), puis la vérifie.
 
-    uv run python scripts/deploy_space.py --image ghcr.io/…@sha256:… --version v0.2.0
+    uv run python scripts/deploy_space.py --version v0.2.1
 
 Variables d'environnement : `HF_TOKEN` (écriture sur le Space), `API_KEY` et
 `SPACE_HF_TOKEN` (lecture du dépôt modèle privé), poussés comme secrets du Space.
@@ -8,9 +8,10 @@ Variables d'environnement : `HF_TOKEN` (écriture sur le Space), `API_KEY` et
 Étapes :
 1. crée le Space Docker s'il n'existe pas ;
 2. pousse les secrets **avant** les fichiers, pour que le build qui suit les trouve ;
-3. pousse un `Dockerfile` d'une ligne `FROM <image>@sha256:…` : le Space exécute
-   exactement l'image construite, scannée et attestée par la release (rien n'est
-   reconstruit) ;
+3. pousse les fichiers du Space : le SDK Docker étant payant, le Space est en SDK Gradio
+   et son `app.py` lance l'API FastAPI (uvicorn, port 7860). `requirements.txt` reprend les
+   versions exactes de `uv.lock` et installe le paquet **depuis le tag** : même code et
+   mêmes versions que la release, environnement reconstruit par le Space (#29) ;
 4. attend que le Space soit `RUNNING` (échec immédiat sur une erreur de build ou
    d'exécution) ;
 5. test de fumée sur l'URL publique : `/health` doit annoncer la version déployée, et une
@@ -22,6 +23,8 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
+import subprocess
 import sys
 import time
 import urllib.error
@@ -36,7 +39,9 @@ sys.path.insert(0, str(ROOT / "src"))
 from credit_scoring.api.features_schema import EXAMPLE_CLIENT  # noqa: E402
 
 SPACE_ID = "WillisBack/credit-scoring-api"
-APP_PORT = 8000
+GIT_URL = "https://github.com/WillIsback/OC-AIE-P8-Confirmez-vos-competences-en-MLOps-Partie-2"
+GRADIO_VERSION = "6.32.0"  # installé par le Space ; compatibilité vérifiée avec uv.lock
+_TAG = re.compile(r"v\d+\.\d+\.\d+")
 ERROR_STAGES = {"BUILD_ERROR", "RUNTIME_ERROR", "CONFIG_ERROR", "NO_APP_FILE"}
 
 README = """---
@@ -44,53 +49,88 @@ title: Credit Scoring API
 emoji: 🏦
 colorFrom: blue
 colorTo: gray
-sdk: docker
-app_port: {port}
+sdk: gradio
+sdk_version: {gradio}
+python_version: "3.12"
+app_file: app.py
 pinned: false
 short_description: API de scoring crédit Home Credit (OC AI Engineer P8)
 ---
 
-Déployé automatiquement par la CI/CD de
-https://github.com/WillIsback/OC-AIE-P8-Confirmez-vos-competences-en-MLOps-Partie-2
-
-Image : `{image}`
+Déployé automatiquement par la CI/CD de {git_url} (version {version}).
 
 Documentation interactive : `/docs` ; les routes `/predict` exigent l'en-tête `X-API-Key`.
 """
 
+APP_PY = '''"""Point d'entrée du Space (SDK Gradio) : lance l'API FastAPI sur le port du Space."""
+
+import os
+
+import uvicorn
+
+uvicorn.run(
+    "credit_scoring.api.app:app",
+    host="0.0.0.0",
+    port=int(os.environ.get("GRADIO_SERVER_PORT", "7860")),
+)
+'''
+
 Fetch = Callable[[str, str, dict[str, str], bytes | None], tuple[int, dict[str, Any]]]
 
 
-def space_files(image: str) -> dict[str, bytes]:
-    """Dockerfile et README du Space ; l'image doit être épinglée par digest."""
-    if "@sha256:" not in image:
-        raise ValueError("image non épinglée : attendu <image>@sha256:<digest>")
-    dockerfile = (
-        "# Généré par scripts/deploy_space.py : image construite et scannée par la release.\n"
-        f"FROM {image}\n"
-    )
+def locked_requirements() -> str:
+    """Dépendances d'exécution aux versions exactes de uv.lock (sans le projet)."""
+    return subprocess.run(
+        [  # noqa: S607 - uv fourni par la CI (setup-uv)
+            "uv",
+            "export",
+            "--no-dev",
+            "--no-hashes",
+            "--no-emit-project",
+            "--quiet",
+            "--format",
+            "requirements-txt",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        cwd=ROOT,
+    ).stdout
+
+
+def space_files(version: str, requirements: str, revision: str) -> dict[str, bytes]:
+    """Fichiers du Space Gradio pour une version taguée."""
+    if not _TAG.fullmatch(version):
+        raise ValueError(f"version {version!r} : attendu un tag vX.Y.Z")
+    lines = [
+        x.strip() for x in requirements.splitlines() if x.strip() and not x.strip().startswith("#")
+    ]
+    lines.append(f"credit-scoring @ git+{GIT_URL}@{version}")
+    readme = README.format(gradio=GRADIO_VERSION, git_url=GIT_URL, version=version)
     return {
-        "Dockerfile": dockerfile.encode(),
-        "README.md": README.format(port=APP_PORT, image=image).encode(),
+        "README.md": readme.encode(),
+        "app.py": APP_PY.encode(),
+        "requirements.txt": ("\n".join(lines) + "\n").encode(),
+        "packages.txt": b"libgomp1\n",
+        "model_revision.txt": (revision.strip() + "\n").encode(),
     }
 
 
-def deploy(api: Any, repo_id: str, image: str, secrets: dict[str, str]) -> None:
-    """Crée le Space, pousse les secrets puis les fichiers (déclenche le build du Space)."""
+def deploy(api: Any, repo_id: str, files: dict[str, bytes], secrets: dict[str, str]) -> None:
+    """Crée le Space si besoin, pousse les secrets puis les fichiers (déclenche le build)."""
     from huggingface_hub import CommitOperationAdd
 
     empty = [k for k, v in secrets.items() if not v]
     if empty:
         raise ValueError(f"Secrets vides : {', '.join(empty)}")
-    files = space_files(image)
-    api.create_repo(repo_id=repo_id, repo_type="space", space_sdk="docker", exist_ok=True)
+    api.create_repo(repo_id=repo_id, repo_type="space", space_sdk="gradio", exist_ok=True)
     for key, value in secrets.items():
         api.add_space_secret(repo_id, key, value)
     api.create_commit(
         repo_id=repo_id,
         repo_type="space",
         operations=[CommitOperationAdd(path, content) for path, content in files.items()],
-        commit_message=f"Déploiement {image.rsplit('@', 1)[-1][:19]}",
+        commit_message="Déploiement automatique (CI/CD)",
     )
 
 
@@ -148,8 +188,7 @@ def main() -> int:
     from huggingface_hub import HfApi
 
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--image", required=True, help="image GHCR épinglée par digest")
-    parser.add_argument("--version", required=True, help="version déployée (vX.Y.Z)")
+    parser.add_argument("--version", required=True, help="tag déployé (vX.Y.Z)")
     parser.add_argument("--space", default=SPACE_ID)
     args = parser.parse_args()
     api = HfApi()  # HF_TOKEN
@@ -157,7 +196,9 @@ def main() -> int:
         "API_KEY": os.environ.get("API_KEY", ""),
         "HF_TOKEN": os.environ.get("SPACE_HF_TOKEN", ""),
     }
-    deploy(api, args.space, args.image, secrets)
+    revision = (ROOT / "model_revision.txt").read_text(encoding="utf-8")
+    files = space_files(args.version, locked_requirements(), revision)
+    deploy(api, args.space, files, secrets)
     time.sleep(20)  # laisse le Space passer en BUILDING avant de le sonder
     wait_running(api, args.space)
     url = str(getattr(api.space_info(args.space), "host", "") or "").rstrip("/")
