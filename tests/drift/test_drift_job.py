@@ -14,7 +14,7 @@ pytest.importorskip("evidently")
 from scripts import drift_job
 
 from credit_scoring.model import load_model
-from credit_scoring.monitoring import db, metrics
+from credit_scoring.monitoring import db, drift, metrics
 from credit_scoring.monitoring.schema import prediction_logs
 from tests.synthetic import clients
 
@@ -37,7 +37,7 @@ def traffic(engine: Any, model: Any, n: int, shift: float) -> None:
     rows = [
         {
             "request_id": uuid.uuid4(),
-            "created_at": NOW - timedelta(hours=1 + i % 100),
+            "created_at": NOW - timedelta(minutes=1 + i % 1000),
             "source": "api",
             "path": "/predict",
             "api_version": "0.4.0",
@@ -60,13 +60,13 @@ def reference(model: Any) -> Any:
 
 def test_job_ecrit_un_rapport(engine: Any, api_artifacts: Path) -> None:
     model = load_model(api_artifacts)
-    traffic(engine, model, 300, shift=1.0)
+    traffic(engine, model, drift.MIN_CURRENT + 200, shift=1.0)
     result = drift_job.run(engine, reference(model), model, timedelta(days=7), now=NOW)
-    assert result.summary["n_current"] == 300
+    assert result.summary["n_current"] == drift.MIN_CURRENT + 200
     assert result.summary["n_drifted"] > 0
     latest = metrics.latest_drift(engine)
     assert latest is not None and latest["model_version"] == model.version
-    assert latest["n_current"] == 300
+    assert latest["n_current"] == drift.MIN_CURRENT + 200
 
 
 def test_job_echantillon_insuffisant(engine: Any, api_artifacts: Path) -> None:
@@ -76,3 +76,12 @@ def test_job_echantillon_insuffisant(engine: Any, api_artifacts: Path) -> None:
     assert result.summary["insufficient"] is True
     latest = metrics.latest_drift(engine)
     assert latest is not None and latest["insufficient"] is True
+
+
+def test_score_de_reference_recalcule_par_le_modele_servi(engine: Any, api_artifacts: Path) -> None:
+    # Référence exportée avec un ancien modèle : ses scores ne doivent pas être comparés.
+    model = load_model(api_artifacts)
+    traffic(engine, model, drift.MIN_CURRENT + 200, shift=0.0)
+    stale = reference(model).assign(prob_default=0.99)
+    result = drift_job.run(engine, stale, model, timedelta(days=7), now=NOW)
+    assert result.summary["score_drift"]["drifted"] is False

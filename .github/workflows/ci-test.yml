@@ -48,7 +48,10 @@ jobs:
           PY=false; DOCKER=false; DRIFT=false
           if grep -qE '\.py$|^pyproject\.toml$|^uv\.lock$|^tests/|^\.github/workflows/ci-test\.yml$' <<<"$FILES"; then PY=true; fi
           if grep -qE '^Dockerfile$|^\.dockerignore$|^pyproject\.toml$|^uv\.lock$|^\.github/workflows/ci-test\.yml$' <<<"$FILES"; then DOCKER=true; fi
-          if grep -qE '^src/credit_scoring/monitoring/|^analysis/|^tests/drift/|^pyproject\.toml$|^\.github/workflows/ci-test\.yml$' <<<"$FILES"; then DRIFT=true; fi
+          # Le job couvre aussi ce dont dépendent les tests de dérive (scripts, fixtures, modèle).
+          DRIFT_PATHS='^src/credit_scoring/(monitoring/|model\.py$)|^analysis/|^tests/(drift/|synthetic\.py$|conftest\.py$)'
+          DRIFT_PATHS+='|^scripts/(drift_job|export_drift_reference|archive_logs)\.py$|^pyproject\.toml$|^\.github/workflows/ci-test\.yml$'
+          if grep -qE "$DRIFT_PATHS" <<<"$FILES"; then DRIFT=true; fi
           { echo "python=$PY"; echo "docker=$DOCKER"; echo "drift=$DRIFT"; } >> "$GITHUB_OUTPUT"
           echo "Python : $PY — Docker : $DOCKER — Dérive : $DRIFT"
 

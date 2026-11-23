@@ -40,6 +40,10 @@ def run(
     end = now or datetime.now(UTC)
     categorical = list(model.features.categories)
     numerical = [c for c in model.features.input_features if c not in categorical]
+    # Score de référence recalculé par le modèle servi : une référence exportée avec un
+    # ancien modèle ne crée ni ne masque de dérive du score.
+    features = reference[list(model.features.input_features)]
+    reference = reference.assign(prob_default=model.predict(features)["prob_default"].to_numpy())
     current = drift.production_frame(engine, window, now=end)
     result = drift.analyse(reference, current, numerical, categorical)
     drift.save(engine, result, end - window, end, model.version, now=end)

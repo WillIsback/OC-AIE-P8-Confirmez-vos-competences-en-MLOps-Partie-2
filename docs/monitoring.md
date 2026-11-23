@@ -123,14 +123,18 @@ Décisions de William : ADR-005 et sa révision du 23/11/2026 (`docs/spec.md`).
   - Variables numériques : distance de Wasserstein normalisée.
   - Variables catégorielles, et numériques à peu de valeurs : distance de Jensen-Shannon.
   - Une colonne entièrement vide dans la fenêtre est écartée et marquée « vide ».
-  - En dessous de 200 appels, le rapport dit « échantillon insuffisant » au lieu de
-    calculer.
+  - En dessous de **1 000 appels**, le rapport dit « échantillon insuffisant » au lieu de
+    calculer. Ce plancher vient d'une mesure faite pendant la revue, en comparant la référence
+    à elle-même : il n'y a aucune dérive réelle, et pourtant 16 à 26 % des features sont
+    déclarées « en dérive » à 200 appels, une seule à 400, aucune à 1 000. Le score de
+    référence est recalculé par le modèle servi à chaque analyse.
 - **Où ça tourne** :
   - Le sous-projet `analysis/` a son propre verrou, en pandas 2.3, parce qu'Evidently ne
     s'importe pas avec pandas 3. L'API et le Space n'importent jamais Evidently.
   - Le job `drift-analysis` tourne chaque jour à 04:00 UTC. Il écrit une ligne dans
     `drift_reports` et publie le rapport HTML comme artefact du run.
   - Le notebook `notebooks/analyse_drift.ipynb` utilise le même module, donc le même calcul.
+    L'onglet Monitoring, lui, n'exécute pas l'analyse : il affiche le dernier résultat du job.
 - **Seuils d'alerte** : ils sont dans `src/credit_scoring/monitoring/thresholds.py`. Les
   valeurs de départ ont été proposées par l'agent ; c'est à William de les fixer (part 👤).
 - **Première mesure** (base locale, 1 374 clients du jeu de test simulés) :
@@ -143,7 +147,7 @@ Décisions de William : ADR-005 et sa révision du 23/11/2026 (`docs/spec.md`).
 | `n_reference`, `n_current` | lignes de référence, appels de production analysés |
 | `share_drifted`, `n_drifted` | part et nombre de features en dérive (colonnes vides exclues) |
 | `score_drift_stat`, `score_drifted` | dérive de `prob_default` : statistique, verdict |
-| `insufficient` | vrai sous 200 appels (pas de calcul) |
+| `insufficient` | vrai sous 1 000 appels (pas de calcul) |
 | `model_version` | modèle qui a produit les scores |
 | `details` | JSON : test, statistique, seuil et verdict par feature, et pour le score |
 

@@ -5,8 +5,10 @@
 Qualité (ruff, mypy, actionlint, zizmor), tests unitaires sur le modèle synthétique
 (couverture lignes et branches ≥ 80 %, rapport dans le résumé du job ; tests de stockage
 aussi sur un **Postgres 17 éphémère**, service du job ; module de dérive testé à part dans
-le sous-projet `analysis/`, job `ci-test (dérive, analysis/)` filtré sur
-`monitoring/`, `analysis/` et `tests/drift/`, couverture 100 %), sécurité
+le sous-projet `analysis/`, job `ci-test (dérive, analysis/)` filtré sur `monitoring/`,
+`model.py`, `analysis/`, `tests/drift/`, les scripts et fixtures dont il dépend, `pyproject.toml`
+et le workflow, couverture 100 % ; après tout changement de dépendance racine, régénérer
+aussi `uv lock --project analysis`), sécurité
 (Gitleaks, SCA, Trivy du dépôt), CodeQL, traçabilité, build de l'image et test de fumée.
 Aucun secret : les PR ne voient ni le modèle réel ni le Space.
 

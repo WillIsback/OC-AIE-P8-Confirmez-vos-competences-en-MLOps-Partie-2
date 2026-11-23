@@ -58,8 +58,8 @@ cible ? ». Il faut un **même calcul partout** : notebook, job et dashboard.
    - Il télécharge la référence, analyse les 7 derniers jours de `source = 'api'` et écrit
      une ligne dans `drift_reports`.
    - Le rapport HTML est publié comme artefact du run, conservé 30 jours.
-   - En dessous de 200 appels dans la fenêtre, il écrit un rapport « échantillon
-     insuffisant » au lieu d'un faux signal.
+   - En dessous de 1 000 appels dans la fenêtre (200 au départ, relevé après mesure en
+     revue), il écrit un rapport « échantillon insuffisant » au lieu d'un faux signal.
 4. **Notebook** `notebooks/analyse_drift.ipynb` (🤖 pour le code, 👤 pour l'interprétation).
    - Il utilise le même module : il lit Neon (`DATABASE_URL`) et la référence HF.
    - Il produit le rapport Evidently, compare les distributions des features clés (top

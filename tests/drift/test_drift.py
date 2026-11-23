@@ -55,15 +55,15 @@ def test_derive_detectee_sur_colonne_decalee() -> None:
 
 
 def test_categorie_inconnue_et_valeurs_nulles_tolerees() -> None:
-    current = frame(400, seed=2)
-    current.loc[:100, "a"] = np.nan
+    current = frame(1200, seed=2)
+    current.loc[:300, "a"] = np.nan
     current.loc[:50, "b"] = "inconnue"
     result = drift.analyse(frame(2000), current, NUM, CAT)
     assert set(by_name(result)) == {"a", "b", "c"}
 
 
 def test_colonne_vide_ecartee_et_signalee() -> None:
-    current = frame(400, seed=3)
+    current = frame(1200, seed=3)
     current["c"] = np.nan
     result = drift.analyse(frame(2000), current, NUM, CAT)
     c = by_name(result)["c"]
@@ -133,3 +133,9 @@ def test_sauvegarde_relue_par_le_dashboard(engine: Any) -> None:
     assert latest["model_version"] == "test-model v1"
     assert latest["details"]["features"][0]["name"] in {"a", "b", "c"}
     assert latest["details"]["score_drift"]["method"]
+
+
+def test_plancher_mesure_sans_faux_positifs() -> None:
+    # Mesure (revue finale) : référence contre elle-même, 16 à 26 % de « dérive » à 200
+    # appels, 1 feature à 400, aucune à 1 000. En dessous, le rapport dit « insuffisant ».
+    assert drift.MIN_CURRENT == 1000
