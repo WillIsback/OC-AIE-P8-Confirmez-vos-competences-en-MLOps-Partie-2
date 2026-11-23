@@ -236,3 +236,48 @@ mesurée. Architecture : `docs/architecture.md`.
   configuration justifiée).
 - **Question d'oral probable** : « Ton gain de 40 % a été mesuré sur ta machine : qu'est-ce
   qui me prouve qu'il existe en production ? »
+
+### ADR-007 — Explicabilité locale et équité
+
+- **Contexte** :
+  - devant un refus, Crédit Express doit pouvoir dire au client pourquoi ;
+  - le modèle de P6 utilise `CODE_GENDER`, le sexe du demandeur, un critère protégé ;
+  - 79 de ses 122 features (65 %) sont des combinaisons OpenFE (`autoFE_f_*`) sans sens
+    métier direct ;
+  - l'importance globale (gain) existe déjà dans les avertissements, mais elle ne dit rien
+    d'un client en particulier.
+- **Options** :
+  1. Route dédiée `POST /predict/explain` : même entrée, même clé, journalisée. Le contrat
+     de `/predict` reste inchangé et le coût n'est payé qu'à la demande.
+  2. Champ `explanation` dans chaque réponse de `/predict` : modifie un contrat validé et
+     alourdit chaque appel.
+  3. Calcul dans l'interface, directement sur le modèle : contourne l'API, et rien n'est
+     journalisé.
+- **Choix** : **option 1** (William, 22/11/2026), avec le TreeSHAP natif de LightGBM.
+  - Il est exact : `base + Σ contributions = logit(score)`.
+  - Il prend environ 2 ms et n'ajoute aucune dépendance (pas de bibliothèque `shap`).
+- **Politique d'équité (William)** : les attributs protégés sont déclarés dans le code
+  (`api/fairness.py`), avec leur justification. On ne peut pas les déduire des artefacts :
+  la sensibilité est une notion juridique.
+  - `CODE_GENDER` : sexe, critère protégé, qui ne peut fonder une décision de crédit
+    (C. pénal art. 225-1).
+  - C'est une question de **non-discrimination**, pas de vie privée : le sexe n'est pas
+    une donnée de l'art. 9 du RGPD.
+  - L'interface affiche un badge « critère protégé (non-discrimination) » et la mention
+    « combinaison calculée » sur les `autoFE_*`.
+  - Un test vérifie que chaque attribut déclaré existe dans `features.json`.
+- **Constat** : pour le client 100038 (refusé, 60,4 %), la première contribution est
+  `CODE_GENDER = M` (+0,136 log-odds). Le badge rend le problème visible ; il ne le règle
+  pas.
+- **Limites assumées** :
+  - l'explication décrit le modèle, pas la causalité ;
+  - une `autoFE_*` peut agir comme proxy d'un critère protégé sans qu'on le voie ;
+  - modifier une feature brute dans l'interface ne recalcule pas les `autoFE_*`.
+- **Pistes, hors périmètre** :
+  - réentraîner sans `CODE_GENDER` et mesurer l'écart de performance et de taux
+    d'acceptation par sexe (parité démographique, égalité des chances) ;
+  - auditer les formules OpenFE pour repérer les proxies ;
+  - écrire des libellés métier pour les features lisibles.
+- **Question d'oral probable** : « Ton modèle refuse le client 100038 d'abord parce que
+  c'est un homme. Tu le mets en production quand même ? »
+
