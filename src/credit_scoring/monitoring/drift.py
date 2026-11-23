@@ -116,6 +116,9 @@ def analyse(
     # Catégorielles en texte des deux côtés : une valeur inconnue reste une catégorie.
     reference = reference.astype({c: "object" for c in cat})
     current = current.astype({c: "object" for c in cat})
+    # Numériques : une valeur illisible devient manquante au lieu de faire planter Evidently.
+    for c in (*num, SCORE):
+        current[c] = pd.to_numeric(current[c], errors="coerce")
     results, html = _run_report(reference, current, num, cat)
     for r in results:
         r["drifted"] = _decide(r["stat"], r["method"], r["threshold"])

@@ -35,6 +35,7 @@ NO_DRIFT = (
     '<div class="drift"><p>Aucune analyse de dérive pour l\'instant : le job planifié '
     "<code>drift-analysis</code> tourne chaque jour à 04:00 UTC.</p></div>"
 )
+DRIFT_DOWN = '<div class="drift"><p>⚠️ Rapport de dérive indisponible ({kind}).</p></div>'
 DASH = "—"
 
 Outputs = tuple[str, pd.DataFrame, pd.DataFrame, pd.DataFrame, str, str]
@@ -96,9 +97,11 @@ def drift_html(report: dict[str, Any] | None) -> str:
     if report is None:
         return NO_DRIFT
     end = pd.Timestamp(report["window_end"])
-    days = (end - pd.Timestamp(report["window_start"])).days
+    span = end - pd.Timestamp(report["window_start"])
+    hours = round(span.total_seconds() / 3600)
+    length = f"{hours} h" if hours < 48 else f"{round(hours / 24)} jours"
     head = (
-        f'<p class="subtitle">Analyse du {end:%d/%m/%Y %H:%M} UTC · {days} jours · '
+        f'<p class="subtitle">Analyse du {end:%d/%m/%Y %H:%M} UTC · {length} · '
         f"{fmt_number(report['n_current'])} appels contre "
         f"{fmt_number(report['n_reference'])} de référence · "
         f"{escape(str(report['model_version']))}</p>"
@@ -123,8 +126,8 @@ def drift_html(report: dict[str, Any] | None) -> str:
         + _tile(
             "dérive du score",
             DASH if score is None else fmt_number(round(score, 3)),
-            score is not None and score > score_limit,
-            f"distance de Wasserstein normalisée ; seuil : {fmt_number(score_limit)}",
+            bool(report["score_drifted"]),  # verdict enregistré : distance ou p-value
+            f"seuil du test : {fmt_number(score_limit)}",
         )
         + "</div>"
     )
@@ -150,12 +153,16 @@ def on_refresh(
     if engine is None:
         *rest, _ = _empty()
         return (*rest, NO_DATABASE)  # type: ignore[return-value]
+    window, source = WINDOWS[window_label], SOURCES[source_label]
     try:
-        logs = metrics.load_logs(engine, WINDOWS[window_label], SOURCES[source_label], now=now)
-        report = metrics.latest_drift(engine)
+        logs = metrics.load_logs(engine, window, source, now=now)
     except Exception as exc:  # base injoignable : affichée, jamais levée
         *rest, _ = _empty()
         return (*rest, UNREACHABLE.format(kind=type(exc).__name__))  # type: ignore[return-value]
+    try:
+        drift_block = drift_html(metrics.latest_drift(engine))
+    except Exception as exc:  # table de dérive illisible : les indicateurs restent affichés
+        drift_block = DRIFT_DOWN.format(kind=type(exc).__name__)
     hist = metrics.score_histogram(logs)
     hist["bin"] = hist["bin"].map(lambda b: f"{b:.2f}")
     return (
@@ -163,6 +170,6 @@ def on_refresh(
         hist,
         metrics.hourly(logs),
         metrics.errors_by_type(logs),
-        drift_html(report),
+        drift_block,
         "",
     )

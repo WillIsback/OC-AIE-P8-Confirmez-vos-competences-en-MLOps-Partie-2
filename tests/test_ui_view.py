@@ -197,5 +197,12 @@ def test_explication_valeurs_echappees() -> None:
     assert "&lt;script&gt;" in html
 
 
+def test_contribution_minuscule_sans_signe_trompeur() -> None:
+    tiny = {**EXPLANATION, "others": -0.0004}
+    html = explanation_html(tiny)
+    assert "\N{MINUS SIGN}0<" not in html and "+0<" not in html
+    assert "≈\N{NARROW NO-BREAK SPACE}0" in html
+
+
 def test_explication_absente() -> None:
     assert explanation_html(None) == ""

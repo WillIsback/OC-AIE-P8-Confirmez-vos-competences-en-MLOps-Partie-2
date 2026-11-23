@@ -34,6 +34,7 @@ from credit_scoring.monitoring.schema import prediction_logs  # noqa: E402
 REPO_ID = "WillisBack/credit-scoring-logs-archive"
 JSON_COLUMNS = ("features", "warnings", "error_detail")
 _AGE = re.compile(r"(\d+)([dh])")
+CHUNK = 10_000  # Postgres : 65 535 paramètres au plus par requête
 
 
 def parse_age(text: str) -> timedelta:
@@ -42,6 +43,8 @@ def parse_age(text: str) -> timedelta:
     if not match:
         raise ValueError(f"durée {text!r} invalide : attendu <n>d ou <n>h (ex. 30d, 1h)")
     n, unit = int(match.group(1)), match.group(2)
+    if n == 0:  # 0h viderait toute la table à la main
+        raise ValueError(f"durée {text!r} invalide : au moins 1 (ex. 1h)")
     return timedelta(days=n) if unit == "d" else timedelta(hours=n)
 
 
@@ -68,6 +71,7 @@ def archive(
     older_than: timedelta,
     now: datetime,
     dry_run: bool = False,
+    chunk: int = CHUNK,
 ) -> int:
     """Archive puis supprime les lignes antérieures à `now - older_than` ; renvoie leur nombre."""
     cutoff = now - older_than
@@ -83,7 +87,7 @@ def archive(
     api.create_repo(repo_id=repo_id, repo_type="dataset", private=True, exist_ok=True)
     api.upload_file(
         path_or_fileobj=_to_parquet(rows),
-        path_in_repo=f"archive/{now:%Y-%m-%dT%H%M}.parquet",
+        path_in_repo=f"archive/{now:%Y-%m-%dT%H%M%S}.parquet",
         repo_id=repo_id,
         repo_type="dataset",
         commit_message=f"Archive des journaux antérieurs au {cutoff:%Y-%m-%d %H:%M} UTC",
@@ -91,7 +95,9 @@ def archive(
     # Suppression seulement après l'envoi : un échec du Hub ne perd aucune ligne.
     ids = [row["id"] for row in rows]
     with engine.begin() as conn:
-        conn.execute(sa.delete(prediction_logs).where(prediction_logs.c.id.in_(ids)))
+        for start in range(0, len(ids), chunk):
+            batch = ids[start : start + chunk]
+            conn.execute(sa.delete(prediction_logs).where(prediction_logs.c.id.in_(batch)))
     return len(rows)
 
 

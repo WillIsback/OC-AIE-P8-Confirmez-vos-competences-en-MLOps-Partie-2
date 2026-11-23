@@ -114,17 +114,12 @@ class ScoringModel:
                 columns.append(codes.astype("float64").to_numpy())
         return np.column_stack(columns)
 
-    def contributions(self, frame: pd.DataFrame) -> tuple[float, np.ndarray]:
-        """Contributions SHAP exactes (TreeSHAP natif) d'un client, en log-odds.
+    def explain_row(self, frame: pd.DataFrame) -> tuple[float, float, np.ndarray]:
+        """(score, valeur de base, contributions SHAP) d'un client, encodé une seule fois.
 
-        Renvoie (valeur de base, contributions dans l'ordre de `features.model_columns`) ;
+        TreeSHAP natif de LightGBM, en log-odds, dans l'ordre de `features.model_columns` :
         base + somme des contributions = logit du score. Une seule ligne attendue.
         """
-        _, base, contributions = self.explain_row(frame)
-        return base, contributions
-
-    def explain_row(self, frame: pd.DataFrame) -> tuple[float, float, np.ndarray]:
-        """(score, valeur de base, contributions) d'un client, encodé une seule fois."""
         matrix = self.encode(frame)
         proba = float(np.asarray(self.booster.predict(matrix), dtype="float64")[0])
         raw = np.asarray(self.booster.predict(matrix, pred_contrib=True))

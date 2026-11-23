@@ -11,7 +11,7 @@ import pandas as pd
 import pytest
 import sqlalchemy as sa
 
-from credit_scoring.monitoring import db
+from credit_scoring.monitoring import db, metrics
 from credit_scoring.monitoring.schema import drift_reports, prediction_logs
 from credit_scoring.monitoring.thresholds import THRESHOLDS
 from credit_scoring.ui import monitoring as mon
@@ -164,3 +164,35 @@ def test_base_injoignable() -> None:
 def test_fenetres_proposees() -> None:
     assert list(mon.WINDOWS) == ["24 heures", "7 jours", "30 jours"]
     assert mon.SOURCES[mon.DEFAULT_SOURCE] == "api"
+
+
+def test_fenetre_de_24_heures_affichee_en_heures(engine: Any) -> None:
+    row = drift_row()
+    row["window_start"] = row["window_end"] - timedelta(hours=24)
+    insert(engine, drift_reports, row)
+    *_, drift_html, _ = refresh(engine)
+    assert "24 h" in drift_html and "1 jours" not in drift_html
+
+
+def test_tuile_du_score_suit_le_verdict_enregistre(engine: Any) -> None:
+    # Mode p-value (petite référence) : statistique élevée = pas de dérive.
+    row = drift_row()
+    row.update(score_drift_stat=0.9, score_drifted=False)
+    insert(engine, drift_reports, row)
+    *_, drift_html, _ = refresh(engine)
+    assert "tile-alert" not in drift_html
+
+
+def test_erreur_sur_la_derive_n_efface_pas_les_indicateurs(
+    engine: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    insert(engine, prediction_logs, log(5))
+
+    def boom(_: Any) -> None:
+        raise sa.exc.ProgrammingError("SELECT", {}, Exception("no such table"))
+
+    monkeypatch.setattr(metrics, "latest_drift", boom)
+    tiles, hist, *_, drift_html, message = refresh(engine)
+    assert hist["count"].sum() == 1 and "tile-value" in tiles
+    assert "indisponible" in drift_html
+    assert message == ""

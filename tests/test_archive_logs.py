@@ -72,7 +72,7 @@ def test_seules_les_lignes_expirees_partent(engine: sa.Engine) -> None:
         {"repo_id": REPO, "repo_type": "dataset", "private": True, "exist_ok": True}
     ]
     (path, data), = api.uploads  # fmt: skip
-    assert path == "archive/2026-12-31T0300.parquet"
+    assert path == "archive/2026-12-31T030000.parquet"  # à la seconde (#45, M4)
     table = pq.read_table(io.BytesIO(data))
     assert table.num_rows == 2
     assert sorted(table.column("features").to_pylist()) == [
@@ -108,7 +108,14 @@ def test_parse_age(text: str, delta: timedelta) -> None:
     assert al.parse_age(text) == delta
 
 
-@pytest.mark.parametrize("text", ["30", "d", "-1d", "2w", ""])
+def test_suppression_par_paquets(engine: sa.Engine) -> None:
+    # Postgres limite une requête à 65 535 paramètres : on supprime par paquets (#45, M3).
+    n = al.archive(engine, FakeApi(), REPO, timedelta(days=0, hours=1), NOW, chunk=1)
+    assert n == 4
+    assert count(engine) == 0
+
+
+@pytest.mark.parametrize("text", ["30", "d", "-1d", "2w", "", "0h", "0d"])
 def test_parse_age_invalide(text: str) -> None:
     with pytest.raises(ValueError, match="durée"):
         al.parse_age(text)

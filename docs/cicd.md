@@ -69,6 +69,10 @@ la dérive des 7 derniers jours de trafic de production par rapport à la réfé
 HF privé), dans le sous-projet `analysis/`.
 
 - Il écrit une ligne dans `drift_reports`, que lit l'onglet Monitoring.
-- Il publie le rapport Evidently HTML comme artefact `drift-report`, gardé 30 jours.
+- Il publie le rapport Evidently HTML comme artefact `drift-report`, gardé 30 jours. Sur
+  ce dépôt public, tout utilisateur GitHub connecté peut le télécharger. Il ne contient
+  aucune ligne client, seulement des histogrammes par feature, mais il révèle les
+  distributions marginales de la référence (données Kaggle). C'est assumé pour la
+  démonstration ; sur un projet réel, on le publierait dans un espace privé.
 - Environnement `ml-models` : `DATABASE_URL`, et `HF_TOKEN` pour lire le modèle et la
   référence.

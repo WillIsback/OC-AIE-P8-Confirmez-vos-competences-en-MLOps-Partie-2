@@ -216,7 +216,11 @@ def smoke(url: str, api_key: str, version: str, fetch: Fetch = _urllib_fetch) ->
     status, prediction = fetch("POST", f"{url}/predict", headers, smoke_payload())
     if status != 200:
         raise RuntimeError(f"/predict : {status} {prediction}")
-    print(f"✅ {url} : v{expected}, prédiction « {prediction.get('decision')} »")
+    # « / » doit servir l'interface Gradio (#40), pas la page HTML de repli de l'API.
+    status, config = fetch("GET", f"{url}/config", {}, None)
+    if status != 200 or config.get("mode") != "blocks":
+        raise RuntimeError(f"/config : {status} {config} (interface Gradio attendue à « / »)")
+    print(f"✅ {url} : v{expected}, prédiction « {prediction.get('decision')} », Gradio à « / »")
 
 
 def space_secrets() -> dict[str, str]:

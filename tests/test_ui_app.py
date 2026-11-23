@@ -167,6 +167,10 @@ def test_hasard_dans_l_echantillon(ctx: Ctx) -> None:
     assert ui.random_id(clients, random.Random(0)) in clients
 
 
+def test_hasard_sans_client() -> None:
+    assert ui.random_id({}, random.Random(0)) is None
+
+
 def test_build_ui_sans_api_gradio_publique() -> None:
     demo = ui.build_ui(lambda: None, dict)  # type: ignore[arg-type,return-value]
     assert isinstance(demo, gr.Blocks)

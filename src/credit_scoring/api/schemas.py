@@ -21,7 +21,6 @@ from credit_scoring.api.features_schema import GeneratedFeatures
 BOOLEEN = "indicateur : 0 ou 1"
 COMPTEUR = "nombre d'événements : jamais négatif"
 JOURS_PASSES = "jours relatifs à la demande : un événement passé est daté avant (≤ 0)"
-DUREE = "durée : jamais négative"
 
 
 class ClientFeatures(GeneratedFeatures):

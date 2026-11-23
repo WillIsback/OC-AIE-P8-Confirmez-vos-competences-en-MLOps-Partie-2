@@ -124,8 +124,8 @@ def on_reset(clients: dict[int, dict[str, Any]], sk_id_curr: int | None) -> tupl
     return tuple(_values(clients[int(sk_id_curr)]))
 
 
-def random_id(clients: dict[int, dict[str, Any]], rng: random.Random) -> int:
-    return rng.choice(sorted(clients))
+def random_id(clients: dict[int, dict[str, Any]], rng: random.Random) -> int | None:
+    return rng.choice(sorted(clients)) if clients else None
 
 
 def _component(field: Field) -> Any:

@@ -62,6 +62,14 @@ def test_categorie_inconnue_et_valeurs_nulles_tolerees() -> None:
     assert set(by_name(result)) == {"a", "b", "c"}
 
 
+def test_numeriques_en_texte_convertis() -> None:
+    current = frame(1200, seed=4)
+    current["c"] = current["c"].astype(object)
+    current.loc[:10, "c"] = "illisible"
+    result = drift.analyse(frame(2000), current, NUM, CAT)
+    assert by_name(result)["c"]["drifted"] is not None
+
+
 def test_colonne_vide_ecartee_et_signalee() -> None:
     current = frame(1200, seed=3)
     current["c"] = np.nan
