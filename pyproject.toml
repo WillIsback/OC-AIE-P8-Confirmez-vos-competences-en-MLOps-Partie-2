@@ -12,7 +12,8 @@ dependencies = [
     "huggingface-hub>=2.4.0",
     "lightgbm>=4.7.0",
     "numpy>=2.5.5",
-    "pandas>=3.1.1",
+    # >= 2.2 : le sous-projet analysis/ (Evidently) tourne en pandas 2.3 ; le verrou racine reste en 3.x
+    "pandas>=2.2",
     # < 2.13 : le Space Gradio installe gradio[mcp], qui exige pydantic <= 2.12.5 (#31)
     "psycopg[binary]>=3.3.9",
     "pydantic>=2.12,<2.13",
@@ -92,6 +93,7 @@ addopts = "-ra --strict-markers --cov=credit_scoring --cov-branch --cov-report=t
 markers = [
     "integration: appelle un service réel (exclu de la CI de PR)",
     "postgres: exige un Postgres de test (TEST_DATABASE_URL), sauté sinon",
+    "drift: module de dérive Evidently, environnement analysis/ (sauté à la racine)",
 ]
 
 [[tool.mypy.overrides]]
@@ -103,3 +105,12 @@ ignore_missing_imports = true
 # pyarrow ne publie ni stubs ni marqueur py.typed (archivage des journaux, #16)
 module = ["pyarrow", "pyarrow.*"]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# Evidently n'est installé que dans le sous-projet analysis/ (#17)
+module = ["evidently", "evidently.*"]
+ignore_missing_imports = true
+
+[tool.coverage.run]
+# Module de dérive : mesuré dans l'environnement analysis/ (job ci-test-drift, 100 %).
+omit = ["*/credit_scoring/monitoring/drift.py"]
