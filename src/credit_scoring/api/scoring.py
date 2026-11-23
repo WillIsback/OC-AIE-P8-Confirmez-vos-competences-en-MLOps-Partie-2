@@ -9,8 +9,16 @@ from typing import Any
 
 import pandas as pd
 
+from credit_scoring.api.fairness import DERIVED_PREFIX, SENSITIVE_FEATURES
 from credit_scoring.api.features_schema import FEATURE_ORDER
-from credit_scoring.api.schemas import ClientFeatures, FeatureWarning, PredictionResponse
+from credit_scoring.api.schemas import (
+    ClientFeatures,
+    Contribution,
+    ExplainResponse,
+    Explanation,
+    FeatureWarning,
+    PredictionResponse,
+)
 from credit_scoring.model import ScoringModel
 
 SAMPLE_FILE = "sample_clients.csv"
@@ -72,6 +80,43 @@ def score(
         threshold=model.threshold,
         model_version=model.version,
         warnings=out_of_bounds(values, model.features.numeric_bounds, model.importance),
+    )
+
+
+def explain(
+    model: ScoringModel,
+    client: ClientFeatures,
+    top_n: int = 10,
+    timings: dict[str, float] | None = None,
+) -> ExplainResponse:
+    """Prédiction + contributions SHAP ; `timings["inference_ms"]` = score + contributions."""
+    local: dict[str, float] = {}
+    prediction = score(model, client, timings=local)
+    values = client.model_dump()
+    frame = pd.DataFrame([values], columns=list(FEATURE_ORDER))
+    start = time.perf_counter()
+    base, contributions = model.contributions(frame)
+    if timings is not None:
+        timings["inference_ms"] = local["inference_ms"] + (time.perf_counter() - start) * 1000
+    ranked = sorted(
+        zip(model.features.model_columns, contributions.tolist(), strict=True),
+        key=lambda item: abs(item[1]),
+        reverse=True,
+    )
+    top = [
+        Contribution(
+            feature=name,
+            value=values.get(name),
+            contribution=value,
+            sensitive=name in SENSITIVE_FEATURES,
+            derived=name.startswith(DERIVED_PREFIX),
+        )
+        for name, value in ranked[:top_n]
+    ]
+    others = float(sum(value for _, value in ranked[top_n:]))
+    return ExplainResponse(
+        **prediction.model_dump(),
+        explanation=Explanation(base_value=base, top=top, others=others),
     )
 
 
