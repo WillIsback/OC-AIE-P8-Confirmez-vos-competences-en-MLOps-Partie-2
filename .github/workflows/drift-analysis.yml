@@ -1,0 +1,62 @@
+# Workflow : analyse de dérive planifiée (#17, ADR-005).
+# Chaque jour : appels de production des 7 derniers jours (source api) comparés à
+# l'échantillon de référence (dataset HF privé) avec Evidently → une ligne drift_reports
+# dans Neon (lue par l'onglet Monitoring du Space) + rapport HTML en artefact du run.
+# Sous-projet analysis/ : Evidently 0.7.23 exige pandas < 3.
+name: drift-analysis
+
+on:
+  schedule:
+    - cron: "0 4 * * *" # 04:00 UTC, après l'archivage de 03:00
+  workflow_dispatch:
+    inputs:
+      window:
+        description: "Fenêtre analysée (ex. 7d, 24h)"
+        type: string
+        default: 7d
+
+concurrency:
+  group: drift-analysis
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  drift:
+    name: Analyse de dérive
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    # DATABASE_URL et HF_TOKEN : secrets de l'environnement ml-models (limité à main).
+    environment: ml-models
+    steps:
+      - name: Checkout du code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Installer uv (cache des dépendances)
+        uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+        with:
+          version: "0.13.7"
+          enable-cache: true
+          cache-dependency-glob: analysis/uv.lock
+
+      - name: Dépendances d'analysis/ (lockfile vérifié)
+        run: uv sync --locked --project analysis
+
+      - name: Analyser la fenêtre
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          MODEL_DIR: artifacts
+          WINDOW: ${{ inputs.window || '7d' }}
+        run: uv run --no-sync --project analysis python scripts/drift_job.py --window "$WINDOW" --out drift-report.html
+
+      - name: Publier le rapport Evidently
+        if: hashFiles('drift-report.html') != ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: drift-report
+          path: drift-report.html
+          retention-days: 30
