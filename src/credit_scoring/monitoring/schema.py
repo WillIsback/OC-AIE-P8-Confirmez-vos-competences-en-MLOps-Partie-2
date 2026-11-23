@@ -42,3 +42,23 @@ prediction_logs = sa.Table(
     sa.Index("ix_prediction_logs_created_at", "created_at"),
     sa.Index("ix_prediction_logs_source_created_at", "source", "created_at"),
 )
+
+# Un rapport de dérive par analyse planifiée (#17) : résumé lu par l'onglet Monitoring.
+drift_reports = sa.Table(
+    "drift_reports",
+    metadata,
+    sa.Column("id", sa.BigInteger().with_variant(sa.Integer(), "sqlite"), primary_key=True),
+    sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+    sa.Column("window_start", sa.DateTime(timezone=True), nullable=False),
+    sa.Column("window_end", sa.DateTime(timezone=True), nullable=False),
+    sa.Column("n_reference", sa.Integer(), nullable=False),
+    sa.Column("n_current", sa.Integer(), nullable=False),
+    sa.Column("share_drifted", sa.Float()),
+    sa.Column("n_drifted", sa.Integer()),
+    sa.Column("score_drift_stat", sa.Float()),
+    sa.Column("score_drifted", sa.Boolean()),
+    sa.Column("insufficient", sa.Boolean(), nullable=False),
+    sa.Column("model_version", sa.String(64)),
+    sa.Column("details", Json),
+    sa.Index("ix_drift_reports_created_at", "created_at"),
+)

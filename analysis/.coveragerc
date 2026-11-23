@@ -1,0 +1,4 @@
+# Couverture du module de dérive, mesurée dans l'environnement analysis/ (CI : ci-test-drift).
+[run]
+branch = True
+source = credit_scoring.monitoring.drift

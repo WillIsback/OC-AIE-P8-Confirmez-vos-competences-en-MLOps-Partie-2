@@ -26,6 +26,7 @@ jobs:
     outputs:
       python: ${{ steps.diff.outputs.python }}
       docker: ${{ steps.diff.outputs.docker }}
+      drift: ${{ steps.diff.outputs.drift }}
     steps:
       - name: Checkout du code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -41,14 +42,15 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${BASE_SHA:-}" ]; then
-            echo "python=true" >> "$GITHUB_OUTPUT"; echo "docker=true" >> "$GITHUB_OUTPUT"; exit 0
+            { echo "python=true"; echo "docker=true"; echo "drift=true"; } >> "$GITHUB_OUTPUT"; exit 0
           fi
           FILES=$(git diff --name-only "$BASE_SHA" HEAD)
-          PY=false; DOCKER=false
+          PY=false; DOCKER=false; DRIFT=false
           if grep -qE '\.py$|^pyproject\.toml$|^uv\.lock$|^tests/|^\.github/workflows/ci-test\.yml$' <<<"$FILES"; then PY=true; fi
           if grep -qE '^Dockerfile$|^\.dockerignore$|^pyproject\.toml$|^uv\.lock$|^\.github/workflows/ci-test\.yml$' <<<"$FILES"; then DOCKER=true; fi
-          echo "python=$PY" >> "$GITHUB_OUTPUT"; echo "docker=$DOCKER" >> "$GITHUB_OUTPUT"
-          echo "Python : $PY — Docker : $DOCKER"
+          if grep -qE '^src/credit_scoring/monitoring/|^analysis/|^tests/drift/|^pyproject\.toml$|^\.github/workflows/ci-test\.yml$' <<<"$FILES"; then DRIFT=true; fi
+          { echo "python=$PY"; echo "docker=$DOCKER"; echo "drift=$DRIFT"; } >> "$GITHUB_OUTPUT"
+          echo "Python : $PY — Docker : $DOCKER — Dérive : $DRIFT"
 
   pytest:
     name: ci-test (pytest)
@@ -91,6 +93,36 @@ jobs:
           TEST_DATABASE_URL: postgresql://postgres:test@localhost:5432/postgres
         # Rapport de couverture (lignes et branches) publié dans le résumé du job.
         run: uv run pytest -m "not integration" --cov-report="markdown-append:$GITHUB_STEP_SUMMARY"
+
+  drift:
+    # Module de dérive Evidently (#17) : sous-projet analysis/ (pandas 2.3, verrou séparé),
+    # car Evidently 0.7.23 ne s'importe pas avec pandas 3.
+    name: ci-test (dérive, analysis/)
+    needs: changes
+    if: needs.changes.outputs.drift == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout du code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Installer uv (cache des dépendances)
+        uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+        with:
+          version: "0.13.7"
+          enable-cache: true
+          cache-dependency-glob: analysis/uv.lock
+
+      - name: Dépendances d'analysis/ (lockfile vérifié)
+        run: uv sync --locked --project analysis
+
+      - name: Tests du module de dérive (couverture 100 %)
+        run: >-
+          uv run --project analysis pytest tests/drift -m drift -o addopts="-ra --strict-markers"
+          --cov --cov-config=analysis/.coveragerc --cov-branch --cov-fail-under=100
+          --cov-report="markdown-append:$GITHUB_STEP_SUMMARY"
 
   docker:
     name: ci-test (image Docker)
