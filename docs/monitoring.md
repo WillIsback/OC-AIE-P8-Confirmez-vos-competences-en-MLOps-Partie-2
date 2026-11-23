@@ -106,3 +106,72 @@ SELECT e->'loc'->>-1 AS champ, count(*)
 FROM prediction_logs, jsonb_array_elements(error_detail) AS e
 WHERE error_type = 'validation' GROUP BY 1 ORDER BY 2 DESC;
 ```
+
+## Analyse de la dérive (#17)
+
+Décisions de William : ADR-005 et sa révision du 23/11/2026 (`docs/spec.md`).
+
+- **Référence** : on tire 20 000 lignes du train de P6, stratifiées sur `TARGET` (graine 42).
+  - Elles sont publiées en Parquet dans le dataset HF **privé**
+    `WillIsback/credit-scoring-drift-reference`, via `scripts/export_drift_reference.py`.
+  - Chaque ligne contient les 122 features au format de l'API, plus `prob_default`, le score
+    du modèle servi. Ce score sert de référence pour la dérive des scores.
+- **Production** : les appels réussis (`status_code = 200`) de `source = 'api'` sur la
+  fenêtre, soit 7 jours par défaut.
+- **Calcul** : le module `credit_scoring.monitoring.drift` utilise les tests par défaut
+  d'Evidently 0.7.23, avec un seuil de 0,1.
+  - Variables numériques : distance de Wasserstein normalisée.
+  - Variables catégorielles, et numériques à peu de valeurs : distance de Jensen-Shannon.
+  - Une colonne entièrement vide dans la fenêtre est écartée et marquée « vide ».
+  - En dessous de **1 000 appels**, le rapport dit « échantillon insuffisant » au lieu de
+    calculer. Ce plancher vient d'une mesure faite pendant la revue, en comparant la référence
+    à elle-même : il n'y a aucune dérive réelle, et pourtant 16 à 26 % des features sont
+    déclarées « en dérive » à 200 appels, une seule à 400, aucune à 1 000. Le score de
+    référence est recalculé par le modèle servi à chaque analyse.
+- **Où ça tourne** :
+  - Le sous-projet `analysis/` a son propre verrou, en pandas 2.3, parce qu'Evidently ne
+    s'importe pas avec pandas 3. L'API et le Space n'importent jamais Evidently.
+  - Le job `drift-analysis` tourne chaque jour à 04:00 UTC. Il écrit une ligne dans
+    `drift_reports` et publie le rapport HTML comme artefact du run.
+  - Le notebook `notebooks/analyse_drift.ipynb` utilise le même module, donc le même calcul.
+    L'onglet Monitoring, lui, n'exécute pas l'analyse : il affiche le dernier résultat du job.
+- **Seuils d'alerte** : ils sont dans `src/credit_scoring/monitoring/thresholds.py`. Les
+  valeurs de départ ont été proposées par l'agent ; c'est à William de les fixer (part 👤).
+- **Première mesure** (base locale, 1 374 clients du jeu de test simulés) :
+  - 17 features sur 122 dérivent (13,9 %), dont 12 `autoFE` et 5 lisibles ;
+  - le score ne dérive pas (0,080, sous le seuil de 0,1).
+
+| Colonne de `drift_reports` | Contenu |
+|---|---|
+| `created_at`, `window_start`, `window_end` | date de l'analyse et fenêtre analysée (UTC) |
+| `n_reference`, `n_current` | lignes de référence, appels de production analysés |
+| `share_drifted`, `n_drifted` | part et nombre de features en dérive (colonnes vides exclues) |
+| `score_drift_stat`, `score_drifted` | dérive de `prob_default` : statistique, verdict |
+| `insufficient` | vrai sous 1 000 appels (pas de calcul) |
+| `model_version` | modèle qui a produit les scores |
+| `details` | JSON : test, statistique, seuil et verdict par feature, et pour le score |
+
+## Dashboard : onglet « Monitoring » du Space (#18)
+
+L'onglet est à https://willisback-credit-scoring-api.hf.space/, à côté de l'onglet
+« Scoring ».
+
+![onglet Monitoring](ui/img/05-monitoring.png)
+
+- **Contrôles** :
+  - fenêtre : 24 heures, 7 jours ou 30 jours ;
+  - source : production `api` par défaut, démo, ou tout.
+  - L'onglet s'actualise quand on l'ouvre, quand on change un contrôle, et avec le bouton.
+- **Tuiles** :
+  - appels, taux d'acceptation (sur les appels réussis) et taux d'erreur (4xx et 5xx) ;
+  - latence et inférence, en p50 et p95 sur les appels réussis.
+  - Une tuile passe en rouge au-delà de son seuil d'alerte (taux d'erreur, latence p95).
+- **Graphiques** : distribution des scores (seuil métier 0,535), latence p95 par heure,
+  erreurs par type.
+- **Dérive** : le dernier rapport du job (part des features en dérive comparée au seuil,
+  dérive du score) et les 10 features qui dérivent le plus.
+- **Lecture** : l'onglet lit les tables `prediction_logs` et `drift_reports` avec la même
+  connexion que l'écrivain des journaux. Il n'affiche que des agrégats. Si la base est
+  absente ou injoignable, un message s'affiche, et l'onglet de scoring reste utilisable.
+- Les calculs se font en pandas (`monitoring/metrics.py`), sur toute la fenêtre. Pour un
+  volume bien plus grand, il faudrait les passer en SQL (`percentile_cont`).

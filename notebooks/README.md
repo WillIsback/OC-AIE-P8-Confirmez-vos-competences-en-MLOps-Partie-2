@@ -4,8 +4,9 @@
 
 Compare les appels de production (`prediction_logs`, `source = 'api'`, statut 200) à
 l'échantillon de référence du train de P6, avec le module partagé
-`credit_scoring.monitoring.drift` (Evidently), le même que le job planifié et l'onglet
-Monitoring du Space.
+`credit_scoring.monitoring.drift` (Evidently), le même que le job planifié, dont l'onglet
+Monitoring du Space affiche le dernier résultat. Sous 1 000 appels réussis, l'analyse
+répond « échantillon insuffisant ».
 
 ```bash
 # Sous-projet analysis/ : Evidently 0.7.23 exige pandas < 3

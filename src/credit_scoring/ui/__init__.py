@@ -19,5 +19,10 @@ def mount_ui(app: FastAPI) -> None:
     from credit_scoring.ui.app import MOUNT_OPTIONS, build_ui
     from credit_scoring.ui.client import internal_client
 
-    demo = build_ui(lambda: internal_client(app), lambda: app.state.demo_clients)
+    demo = build_ui(
+        lambda: internal_client(app),
+        lambda: app.state.demo_clients,
+        # Onglet Monitoring : même moteur que l'écrivain des journaux (None sans DATABASE_URL).
+        lambda: getattr(getattr(app.state, "log_writer", None), "engine", None),
+    )
     gr.mount_gradio_app(app, demo, path="/", **MOUNT_OPTIONS)

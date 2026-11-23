@@ -4,7 +4,11 @@
 
 Qualité (ruff, mypy, actionlint, zizmor), tests unitaires sur le modèle synthétique
 (couverture lignes et branches ≥ 80 %, rapport dans le résumé du job ; tests de stockage
-aussi sur un **Postgres 17 éphémère**, service du job), sécurité
+aussi sur un **Postgres 17 éphémère**, service du job ; module de dérive testé à part dans
+le sous-projet `analysis/`, job `ci-test (dérive, analysis/)` filtré sur `monitoring/`,
+`model.py`, `analysis/`, `tests/drift/`, les scripts et fixtures dont il dépend, `pyproject.toml`
+et le workflow, couverture 100 % ; après tout changement de dépendance racine, régénérer
+aussi `uv lock --project analysis`), sécurité
 (Gitleaks, SCA, Trivy du dépôt), CodeQL, traçabilité, build de l'image et test de fumée.
 Aucun secret : les PR ne voient ni le modèle réel ni le Space.
 
@@ -46,7 +50,7 @@ répond à une prédiction authentifiée. L'image GHCR reste publiée pour un h�
 | `HF_TOKEN` | environnement `ml-models` (main) | lire le dépôt modèle privé (gate), écrire le Space (deploy) |
 | `SPACE_HF_TOKEN` | environnement `ml-models` → secret du Space `HF_TOKEN` | lecture seule du dépôt modèle, au démarrage du conteneur |
 | `API_KEY` | environnement `ml-models` → secret du Space | clé attendue dans `X-API-Key` |
-| `DATABASE_URL` | environnement `ml-models` → secret du Space | base Neon des journaux de production (gate, migrations, Space, archivage) |
+| `DATABASE_URL` | environnement `ml-models` → secret du Space | base Neon des journaux de production (gate, migrations, Space, archivage, analyse de dérive) |
 | `RELEASE_TOKEN` | environnement `release` (main) | créer le tag malgré la modification des workflows |
 
 Le Space reçoit un jeton **en lecture seule** : un conteneur compromis ne peut ni modifier
@@ -57,3 +61,14 @@ le modèle ni redéployer le Space.
 Chaque jour à 03:00 UTC (et à la main, avec une durée courte pour la démo) : archivage des
 journaux de plus de 30 jours dans un dataset Hugging Face privé, puis purge dans Neon
 (`docs/monitoring.md`). Environnement `ml-models` (`DATABASE_URL`, `HF_TOKEN`).
+
+## Planifié (`drift-analysis.yml`)
+
+Le job tourne chaque jour à 04:00 UTC, et à la main avec une fenêtre au choix. Il analyse
+la dérive des 7 derniers jours de trafic de production par rapport à la référence (dataset
+HF privé), dans le sous-projet `analysis/`.
+
+- Il écrit une ligne dans `drift_reports`, que lit l'onglet Monitoring.
+- Il publie le rapport Evidently HTML comme artefact `drift-report`, gardé 30 jours.
+- Environnement `ml-models` : `DATABASE_URL`, et `HF_TOKEN` pour lire le modèle et la
+  référence.

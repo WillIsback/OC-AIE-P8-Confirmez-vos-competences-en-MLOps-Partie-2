@@ -7,6 +7,7 @@ sous-projet `analysis/` (pandas 2.3) ; l'API et le Space ne l'importent jamais.
 Tests par défaut d'Evidently (référence > 1 000 lignes) : distance de Wasserstein
 normalisée (numériques), distance de Jensen-Shannon (catégorielles et numériques à peu de
 valeurs), seuil 0,1. Une colonne entièrement vide dans la fenêtre est écartée et signalée.
+Sous 1 000 appels, le bruit d'échantillonnage dépasse ce seuil : pas de calcul.
 """
 
 from __future__ import annotations
@@ -20,7 +21,9 @@ import sqlalchemy as sa
 
 from credit_scoring.monitoring.schema import drift_reports, prediction_logs
 
-MIN_CURRENT = 200  # en dessous : « échantillon insuffisant », pas de faux signal
+# En dessous : « échantillon insuffisant ». Mesuré en revue (référence contre elle-même) :
+# 16 à 26 % de features « en dérive » à 200 appels, une à 400, aucune à 1 000.
+MIN_CURRENT = 1000
 SCORE = "prob_default"
 EMPTY = "vide"
 
