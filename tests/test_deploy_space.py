@@ -169,6 +169,7 @@ def test_test_de_fumee_verifie_version_et_prediction() -> None:
         {
             "health": (200, {"status": "ok", "version": "0.2.1"}),
             "predict": (200, {"decision": "accordé", "model_version": "home-credit-serving v2"}),
+            "config": (200, {"version": "6.32.0", "mode": "blocks"}),
         }
     )
     ds.smoke("https://x.hf.space", api_key="k", version="v0.2.1", fetch=fetch)
@@ -191,6 +192,19 @@ def test_test_de_fumee_refuse_une_prediction_en_erreur() -> None:
         }
     )
     with pytest.raises(RuntimeError, match="401"):
+        ds.smoke("https://x.hf.space", api_key="k", version="v0.2.1", fetch=fetch)
+
+
+def test_test_de_fumee_exige_l_interface_gradio() -> None:
+    # « / » doit servir Gradio, pas la page HTML de repli (#45, M9) : /config en JSON.
+    fetch = _http(
+        {
+            "health": (200, {"status": "ok", "version": "0.2.1"}),
+            "predict": (200, {"decision": "accordé"}),
+            "config": (404, {"detail": "Not Found"}),
+        }
+    )
+    with pytest.raises(RuntimeError, match="Gradio"):
         ds.smoke("https://x.hf.space", api_key="k", version="v0.2.1", fetch=fetch)
 
 

@@ -77,6 +77,8 @@ def errors_markdown(err: ApiError) -> str:
 
 
 def _signed(value: float) -> str:
+    if abs(value) < 0.0005:  # arrondi à 0,000 : pas de signe trompeur devant 0
+        return f"≈{NNBSP}0"
     text = fmt_number(round(abs(value), 3))
     return f"{MINUS}{text}" if value < 0 else f"+{text}"
 

@@ -52,7 +52,7 @@ def with_nulls() -> dict[str, Any]:
 def test_contributions_base_plus_somme_egale_logit(api_artifacts: Path) -> None:
     model = load_model(api_artifacts)
     frame = pd.DataFrame([EXAMPLE_CLIENT], columns=list(FEATURE_ORDER))
-    base, contributions = model.contributions(frame)
+    _, base, contributions = model.explain_row(frame)
     assert contributions.shape == (len(model.features.model_columns),)
     prob = float(model.predict(frame)["prob_default"].iloc[0])
     assert base + contributions.sum() == pytest.approx(logit(prob), abs=1e-6)
@@ -159,7 +159,7 @@ def test_route_demo_toujours_disponible(client: TestClient) -> None:
 def test_logged_path_reconnait_explain() -> None:
     scope = {"type": "http", "method": "POST", "path": "/predict/explain"}
     assert logged_path(scope) == "/predict/explain"
-    assert logged_path({**scope, "path": "/predict/explain/"}) == "/predict/explain"
+    assert logged_path({**scope, "path": "/predict/explain/"}) is None  # 404 : non journalisé
 
 
 def test_appel_explain_journalise(

@@ -23,10 +23,12 @@ def logged_path(scope: Scope) -> str | None:
     """Gabarit de la route journalisée, ou `None` si l'appel n'est pas une prédiction."""
     if scope["type"] != "http" or scope["method"] != "POST":
         return None
-    path = str(scope["path"]).rstrip("/")
+    # Chemin exact : `/predict/` (barre finale) reçoit un 307 de FastAPI vers `/predict`,
+    # qui est journalisé ; le journaliser aussi compterait l'appel deux fois.
+    path = str(scope["path"])
     if path in ("/predict", EXPLAIN_PATH):
         return path
-    if path.startswith("/predict/") and path.count("/") == 2:
+    if path.startswith("/predict/") and path.count("/") == 2 and not path.endswith("/"):
         return DEMO_PATH
     return None
 

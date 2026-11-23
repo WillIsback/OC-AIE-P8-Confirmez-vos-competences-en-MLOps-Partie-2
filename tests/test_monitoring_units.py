@@ -17,7 +17,9 @@ from credit_scoring.monitoring.middleware import _buffer, logged_path
     ("scope", "attendu"),
     [
         ({"type": "http", "method": "POST", "path": "/predict"}, "/predict"),
-        ({"type": "http", "method": "POST", "path": "/predict/"}, "/predict"),
+        # Barre finale : FastAPI répond 307 vers /predict, qui sera journalisé (#45, M2).
+        ({"type": "http", "method": "POST", "path": "/predict/"}, None),
+        ({"type": "http", "method": "POST", "path": "/predict/explain/"}, None),
         ({"type": "http", "method": "POST", "path": "/predict/42"}, "/predict/{sk_id_curr}"),
         ({"type": "http", "method": "POST", "path": "/predict/42/x"}, None),
         ({"type": "http", "method": "POST", "path": "/predictions"}, None),
