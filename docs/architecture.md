@@ -1,36 +1,41 @@
 # Architecture — OC-AIE-P8
 
-Décisions de référence : `docs/spec.md` (ADR-001 à ADR-006).
+Décisions de référence : `docs/spec.md` (ADR-001 à ADR-007). Schéma mis à jour au lot
+v0.4.0 : le dashboard est un onglet du Space de l'API (révisions de l'ADR-005), et non un
+second Space Streamlit comme prévu aux specs.
 
 ## Composants
 
 ```mermaid
 flowchart LR
   client["Système Crédit Express<br/>(appelant)"]
-  subgraph space_api["Space HF « API » (Docker)"]
+  subgraph space["Space HF (SDK Gradio, ZeroGPU) : FastAPI + Gradio monté à « / »"]
     auth["Contrôle de la clé d'API<br/>X-API-Key (ADR-003)"]
     valid["Validation Pydantic<br/>122 features : invalide → 422,<br/>inhabituel → avertissement (ADR-001)"]
-    model["Modèle chargé une fois<br/>encodeur + LightGBM + seuil<br/>(ADR-002)"]
+    model["Modèle chargé une fois<br/>encodeur + LightGBM + seuil (ADR-002)<br/>contributions SHAP (ADR-007)"]
     demo[("Échantillon ~1 000 clients<br/>route /predict/{sk_id_curr}")]
-    logger["Journalisation<br/>tâche de fond + stdout JSON<br/>chronométrage par étape (ADR-006)"]
+    logger["Journalisation<br/>tâche de fond + stdout JSON (ADR-004)"]
+    ui_score["Onglet Scoring<br/>POST /predict/explain (client interne)"]
+    ui_mon["Onglet Monitoring<br/>indicateurs + dernière dérive"]
   end
-  hub[("Hub HF : dépôt modèle<br/>artefacts + manifest.json")]
-  neon[("PostgreSQL Neon (UE)<br/>table des prédictions (ADR-004)")]
-  subgraph space_dash["Space HF « Monitoring » (Streamlit)"]
-    dash["Dashboard : scores, latence,<br/>inférence, erreurs, dérive"]
-  end
-  job["GitHub Actions planifié<br/>analyse Evidently (ADR-005)"]
-  ref[("Référence : jeu<br/>d'entraînement P6")]
-  notebook["Notebook d'analyse du drift"]
+  hub[("Hub HF : dépôt modèle privé<br/>artefacts + manifest.json")]
+  ref[("Hub HF : dataset privé<br/>référence 20 000 lignes du train P6")]
+  archive[("Hub HF : dataset privé<br/>archives Parquet (> 30 jours)")]
+  neon[("PostgreSQL Neon (UE)<br/>prediction_logs, drift_reports")]
+  job["GitHub Actions quotidien<br/>drift-analysis (Evidently, analysis/)"]
+  purge["GitHub Actions quotidien<br/>archive-logs"]
+  notebook["Notebook d'analyse du drift<br/>(analysis/)"]
 
-  client -->|"POST /predict"| auth --> valid --> model
+  client -->|"POST /predict, /predict/explain"| auth --> valid --> model
+  ui_score --> auth
   demo --> valid
   model --> logger -->|"INSERT"| neon
-  hub -. "téléchargé au build<br/>(révision figée)" .-> model
-  neon -->|"lecture seule"| dash
+  hub -. "téléchargé au démarrage<br/>(révision figée)" .-> model
+  neon -->|"lecture"| ui_mon
   neon --> job
   ref --> job
-  job -->|"rapport HTML"| dash
+  job -->|"drift_reports"| neon
+  neon --> purge --> archive
   neon --> notebook
   ref --> notebook
 ```
