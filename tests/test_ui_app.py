@@ -207,3 +207,22 @@ def test_api_gradio_documentee_telle_qu_elle_est() -> None:
     # (Gradio 6.32) : le pouvoir d'un appel direct reste celui de l'interface (décision D4).
     assert ui.PRIVATE == {"api_visibility": "private"}
     assert "non documentés" in (ui.__doc__ or "")
+
+
+def test_onglets_scoring_et_monitoring() -> None:
+    demo = ui.build_ui(lambda: None, dict)  # type: ignore[arg-type,return-value]
+    labels = [b.label for b in demo.blocks.values() if isinstance(b, gr.Tab)]
+    assert labels == ["Scoring", "Monitoring"]
+
+
+def test_monitoring_relie_a_la_base_fournie() -> None:
+    seen: list[Any] = []
+
+    def provider() -> Any:
+        seen.append(1)
+        return None
+
+    demo = ui.build_ui(lambda: None, dict, provider)  # type: ignore[arg-type,return-value]
+    by_name: dict[Any, Any] = {f.name: f.fn for f in demo.fns.values()}
+    *_, message = by_name["refresh"]("24 heures", "Production (api)")
+    assert seen and "non configurée" in message

@@ -27,6 +27,7 @@ import gradio as gr
 
 from credit_scoring import __version__
 from credit_scoring.api.features_schema import GeneratedFeatures
+from credit_scoring.ui import monitoring
 from credit_scoring.ui.client import ApiClient, ApiError
 from credit_scoring.ui.view import errors_markdown, explanation_html, result_html, warnings_rows
 
@@ -171,6 +172,15 @@ CSS = """
 .badge-sensitive { display: inline-block; margin-left: 4px; padding: 0 6px; border-radius: 9px;
   background: #fef3c7; color: #92400e; border: 1px solid #f59e0b; font-size: .75rem;
   cursor: help; }
+.tiles { display: flex; flex-wrap: wrap; gap: 10px; margin: 6px 0 10px; }
+.tile { flex: 1 1 120px; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px 10px; }
+.tile-value { font-size: 1.35rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.tile-label { color: #64748b; font-size: .8rem; }
+.tile-alert { border-color: #ef4444; background: #fef2f2; }
+.tile-alert .tile-value { color: #b42318; }
+.drift-table { border-collapse: collapse; font-size: .85rem; width: 100%; }
+.drift-table th, .drift-table td { text-align: left; padding: 3px 8px;
+  border-bottom: 1px solid #f1f5f9; }
 .derived { margin-left: 4px; color: #64748b; font-size: .75rem; font-style: italic; }
 """
 FORCE_LIGHT = """
@@ -196,10 +206,51 @@ MOUNT_OPTIONS: dict[str, Any] = {
 }
 
 
+def _monitoring_tab() -> list[Any]:
+    """Contrôles et panneaux de l'onglet Monitoring : [fenêtre, source, bouton, *panneaux]."""
+    gr.Markdown(
+        "Trafic enregistré dans la base de production (Neon), dernier rapport de dérive du "
+        "job planifié. Seuils d'alerte : `monitoring/thresholds.py`.",
+        elem_classes="subtitle",
+    )
+    with gr.Row():
+        window = gr.Radio(list(monitoring.WINDOWS), value="24 heures", label="Fenêtre")
+        source = gr.Radio(list(monitoring.SOURCES), value=monitoring.DEFAULT_SOURCE, label="Source")
+        refresh_btn = gr.Button("Actualiser", variant="primary")
+    message = gr.Markdown()
+    tiles = gr.HTML()
+    with gr.Row():
+        hist = gr.BarPlot(
+            x="bin",
+            y="count",
+            title="Distribution des scores (seuil métier 0,535)",
+            x_title="prob_default (borne basse de la tranche)",
+            y_title="appels",
+            x_label_angle=-45,
+            y_lim=[0, None],
+        )
+        hourly = gr.LinePlot(
+            x="hour",
+            y="latency_p95",
+            title="Latence p95 par heure",
+            x_title="heure (UTC)",
+            y_title="ms",
+            y_lim=[0, None],
+        )
+    errors = gr.BarPlot(
+        x="error_type", y="count", title="Erreurs par type", y_title="appels", y_lim=[0, None]
+    )
+    gr.Markdown("### Dérive des données (job quotidien)")
+    drift = gr.HTML()
+    return [window, source, refresh_btn, tiles, hist, hourly, errors, drift, message]
+
+
 def build_ui(
     client_factory: Callable[[], ApiClient],
     clients_provider: Callable[[], dict[int, dict[str, Any]]],
+    engine_provider: Callable[[], Any] = lambda: None,
 ) -> gr.Blocks:
+    """Onglet « Scoring » (démonstration) et onglet « Monitoring » (#18, lu dans Neon)."""
     client = client_factory()
     rng = random.Random()
 
@@ -210,30 +261,35 @@ def build_ui(
             "[documentation de l'API](/docs)",
             elem_classes="subtitle",
         )
-        with gr.Row(equal_height=False):
-            with gr.Column(scale=5):
-                gr.Markdown("### Client")
-                with gr.Row():
-                    sk_id = gr.Dropdown(label="SK_ID_CURR", choices=[], filterable=True, scale=3)
-                    lucky = gr.Button("Client au hasard", scale=1)
-                gr.Markdown("### Valeurs modifiables")
-                fields = [_component(f) for f in EDITABLE]
-                gr.Markdown(AUTOFE_NOTE, elem_classes="subtitle")
-                with gr.Row():
-                    score_btn = gr.Button("Scorer le client", variant="primary")
-                    reset_btn = gr.Button("Rétablir")
-            with gr.Column(scale=4):
-                gr.Markdown("### Résultat")
-                error = gr.Markdown()
-                result = gr.HTML()
-                chart = gr.HTML()
-                warnings = gr.Dataframe(
-                    headers=["Feature", "Valeur", "Bornes (train)", "Rang", "Part"],
-                    column_widths=["26%", "18%", "30%", "13%", "13%"],
-                    label="Avertissements (hors des bornes du jeu d'entraînement)",
-                    interactive=False,
-                    wrap=True,
-                )
+        with gr.Tabs():
+            with gr.Tab("Scoring"), gr.Row(equal_height=False):
+                with gr.Column(scale=5):
+                    gr.Markdown("### Client")
+                    with gr.Row():
+                        sk_id = gr.Dropdown(
+                            label="SK_ID_CURR", choices=[], filterable=True, scale=3
+                        )
+                        lucky = gr.Button("Client au hasard", scale=1)
+                    gr.Markdown("### Valeurs modifiables")
+                    fields = [_component(f) for f in EDITABLE]
+                    gr.Markdown(AUTOFE_NOTE, elem_classes="subtitle")
+                    with gr.Row():
+                        score_btn = gr.Button("Scorer le client", variant="primary")
+                        reset_btn = gr.Button("Rétablir")
+                with gr.Column(scale=4):
+                    gr.Markdown("### Résultat")
+                    error = gr.Markdown()
+                    result = gr.HTML()
+                    chart = gr.HTML()
+                    warnings = gr.Dataframe(
+                        headers=["Feature", "Valeur", "Bornes (train)", "Rang", "Part"],
+                        column_widths=["26%", "18%", "30%", "13%", "13%"],
+                        label="Avertissements (hors des bornes du jeu d'entraînement)",
+                        interactive=False,
+                        wrap=True,
+                    )
+            with gr.Tab("Monitoring") as monitoring_tab:
+                refresh_outputs = _monitoring_tab()
 
         outputs = [*fields, result, chart, warnings, error]
 
@@ -252,6 +308,14 @@ def build_ui(
         )
         score_btn.click(score, [sk_id, *fields], outputs, **PRIVATE)
         reset_btn.click(lambda sk: on_reset(clients_provider(), sk), sk_id, fields, **PRIVATE)
+
+        window, source, refresh_btn, *panels = refresh_outputs
+
+        def refresh(window_label: str, source_label: str) -> tuple[Any, ...]:
+            return monitoring.on_refresh(engine_provider(), window_label, source_label)
+
+        for event in (refresh_btn.click, monitoring_tab.select, window.change, source.change):
+            event(refresh, [window, source], panels, **PRIVATE)
 
     blocks: gr.Blocks = demo
     return blocks
