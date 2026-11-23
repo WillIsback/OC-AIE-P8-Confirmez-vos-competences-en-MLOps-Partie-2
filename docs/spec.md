@@ -202,6 +202,20 @@ mesurée. Architecture : `docs/architecture.md`.
   Gradio du Space de l'API** (Gradio monté sur FastAPI, #40), et non un second Space
   Streamlit : un compte gratuit n'héberge que 2 Spaces ZeroGPU, réservés au SDK Gradio, et le
   SDK Docker est payant. Lecture sur Neon inchangée ; analyse planifiée inchangée.
+- **Révision (William, 23/11/2026, #17 et #18)** :
+  - **Référence** : un échantillon stratifié de 20 000 lignes du train de P6, dans un
+    dataset HF privé.
+  - **Dérive** : calculée par un job planifié quotidien qui écrit dans la table
+    `drift_reports` de Neon, et non à la demande dans le Space.
+  - **Environnement séparé** : Evidently 0.7.23 ne s'importe pas avec pandas 3, et cette
+    incompatibilité n'est pas déclarée. L'analyse tourne donc dans le sous-projet
+    `analysis/`, avec son propre verrou en pandas 2.3. L'API, l'image et le Space restent
+    en pandas 3.
+  - **Connexion** : le dashboard vit dans le processus de l'API. Il lit Neon avec la même
+    connexion que l'écrivain des journaux, et non avec un compte en lecture seule
+    (`DATABASE_URL_RO`, prévu au départ). C'est à assumer à l'oral : moins de privilèges
+    aurait été préférable, mais le dashboard ne fait que des lectures, et il ne propose
+    aucune saisie libre.
 - **Question d'oral probable** : « Ton rapport Evidently dit que 30 % des features ont
   dérivé : est-ce grave, et comment le sais-tu sans cible en production ? »
 
