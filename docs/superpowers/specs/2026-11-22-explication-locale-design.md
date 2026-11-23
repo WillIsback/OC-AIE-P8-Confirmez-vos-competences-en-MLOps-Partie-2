@@ -21,7 +21,7 @@ des 79 features `autoFE_f_*` (65 % du modèle).
 ## Décisions
 
 - **Calcul** : TreeSHAP natif de LightGBM (`booster.predict(X, pred_contrib=True)`), exact,
-  ~2 ms, sans dépendance. Unité : **log-odds** (logit) ; `base_value + Σ contributions =
+  ~2 ms de TreeSHAP (encodage partagé avec le score), sans dépendance. Unité : **log-odds** (logit) ; `base_value + Σ contributions =
   logit(prob_default)`. Encodeur ordinal : une contribution = une feature d'entrée.
 - **Réponse** : `ExplainResponse` = `PredictionResponse` + `explanation` :
   `base_value`, `top` (10 contributions de plus grande valeur absolue : `feature`, `value`

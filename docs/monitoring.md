@@ -5,7 +5,8 @@ dans `docs/superpowers/specs/2026-11-22-journalisation-production-design.md` (#1
 
 ## Ce qui est stocké, et pourquoi
 
-Chaque appel `POST /predict` ou `POST /predict/{sk_id_curr}` produit **un enregistrement**
+Chaque appel `POST /predict`, `POST /predict/explain` ou `POST /predict/{sk_id_curr}` produit
+**un enregistrement**
 (table `prediction_logs`), y compris les appels refusés. Choix de William : tout tracer,
 chaque groupe de colonnes servant un usage du monitoring.
 
@@ -15,7 +16,7 @@ chaque groupe de colonnes servant un usage du monitoring.
 | Identité | `client_ref` : HMAC-SHA256 de `SK_ID_CURR` (route de démo seulement) | suivre les appels d'un même client **sans** l'identifier |
 | Entrées | `features` : les 122 features validées ; pour un 422, le corps reçu (tronqué à 64 Kio) ; rien pour un 401 | dérive des données (Evidently, v0.4.0) |
 | Sorties | `prob_default`, `decision`, `threshold`, `warnings`, `n_warnings` | dérive des scores, taux de refus, valeurs hors bornes |
-| Performance | `latency_ms` (requête complète), `inference_ms` (`model.predict` seul) | latence, latences anormales, comparaison avant/après optimisation |
+| Performance | `latency_ms` (requête complète), `inference_ms` (encodage et `model.predict` ; plus les contributions SHAP sur `/predict/explain`) | latence, latences anormales, comparaison avant/après optimisation |
 | Erreurs | `status_code`, `error_type` (`unauthorized`, `not_found`, `validation`, `client_error`, `internal`), `error_detail` (détail compact du 422) | taux d'erreur, champs le plus souvent refusés |
 
 `source` vaut `api` (trafic de production, y compris la simulation), `ui-demo` (interface
@@ -91,7 +92,7 @@ FROM prediction_logs GROUP BY source;
 SELECT date_trunc('hour', created_at) AS heure,
        percentile_cont(0.95) WITHIN GROUP (ORDER BY latency_ms) AS p95_ms,
        percentile_cont(0.95) WITHIN GROUP (ORDER BY inference_ms) AS p95_inference_ms
-FROM prediction_logs WHERE source = 'api' AND status_code = 200
+FROM prediction_logs WHERE source = 'api' AND status_code = 200 AND path <> '/predict/explain'
 GROUP BY 1 ORDER BY 1;
 
 -- Distribution des scores et taux de refus

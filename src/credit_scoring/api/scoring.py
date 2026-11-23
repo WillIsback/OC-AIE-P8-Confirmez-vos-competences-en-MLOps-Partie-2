@@ -73,10 +73,16 @@ def score(
     row = model.predict(frame).iloc[0]
     if timings is not None:
         timings["inference_ms"] = (time.perf_counter() - start) * 1000
+    return _response(model, values, float(row["prob_default"]), sk_id_curr)
+
+
+def _response(
+    model: ScoringModel, values: dict[str, Any], prob: float, sk_id_curr: int | None
+) -> PredictionResponse:
     return PredictionResponse(
         sk_id_curr=sk_id_curr,
-        prob_default=float(row["prob_default"]),
-        decision="refusé" if int(row["decision"]) == 1 else "accordé",
+        prob_default=prob,
+        decision="refusé" if prob >= model.threshold else "accordé",
         threshold=model.threshold,
         model_version=model.version,
         warnings=out_of_bounds(values, model.features.numeric_bounds, model.importance),
@@ -89,15 +95,15 @@ def explain(
     top_n: int = 10,
     timings: dict[str, float] | None = None,
 ) -> ExplainResponse:
-    """Prédiction + contributions SHAP ; `timings["inference_ms"]` = score + contributions."""
-    local: dict[str, float] = {}
-    prediction = score(model, client, timings=local)
+    """Prédiction + contributions SHAP ; `timings["inference_ms"]` = encodage, score et
+    contributions (client encodé une seule fois)."""
     values = client.model_dump()
     frame = pd.DataFrame([values], columns=list(FEATURE_ORDER))
     start = time.perf_counter()
-    base, contributions = model.contributions(frame)
+    prob, base, contributions = model.explain_row(frame)
     if timings is not None:
-        timings["inference_ms"] = local["inference_ms"] + (time.perf_counter() - start) * 1000
+        timings["inference_ms"] = (time.perf_counter() - start) * 1000
+    prediction = _response(model, values, prob, None)
     ranked = sorted(
         zip(model.features.model_columns, contributions.tolist(), strict=True),
         key=lambda item: abs(item[1]),

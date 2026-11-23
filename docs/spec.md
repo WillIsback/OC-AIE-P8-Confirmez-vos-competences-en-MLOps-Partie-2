@@ -255,7 +255,8 @@ mesurée. Architecture : `docs/architecture.md`.
      journalisé.
 - **Choix** : **option 1** (William, 22/11/2026), avec le TreeSHAP natif de LightGBM.
   - Il est exact : `base + Σ contributions = logit(score)`.
-  - Il prend environ 2 ms et n'ajoute aucune dépendance (pas de bibliothèque `shap`).
+  - Il coûte environ 1,6 ms de plus qu'un `/predict` (encodage partagé) et n'ajoute aucune
+    dépendance (pas de bibliothèque `shap`).
 - **Politique d'équité (William)** : les attributs protégés sont déclarés dans le code
   (`api/fairness.py`), avec leur justification. On ne peut pas les déduire des artefacts :
   la sensibilité est une notion juridique.
@@ -278,6 +279,8 @@ mesurée. Architecture : `docs/architecture.md`.
     d'acceptation par sexe (parité démographique, égalité des chances) ;
   - auditer les formules OpenFE pour repérer les proxies ;
   - écrire des libellés métier pour les features lisibles.
-- **Question d'oral probable** : « Ton modèle refuse le client 100038 d'abord parce que
-  c'est un homme. Tu le mets en production quand même ? »
+- **Question d'oral probable** : « La plus forte contribution au refus du client 100038,
+  c'est son sexe. Le refus tient-il sans elle, et mets-tu ce modèle en production
+  quand même ? » (Contrefactuel : avec `CODE_GENDER = F`, 56,9 %, toujours au-dessus du
+  seuil de 53,5 % ; le sexe pèse 13 % de l'écart au score de base.)
 

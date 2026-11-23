@@ -183,3 +183,21 @@ def test_appel_explain_journalise(
     assert row.features == EXAMPLE_CLIENT
     assert row.prob_default is not None
     assert row.inference_ms is not None and row.inference_ms > 0
+
+
+def test_explain_encode_le_client_une_seule_fois(
+    api_artifacts: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from credit_scoring.model import ScoringModel
+
+    calls: list[int] = []
+    original = ScoringModel.encode
+
+    def counting(self: ScoringModel, frame: pd.DataFrame) -> Any:
+        calls.append(1)
+        return original(self, frame)
+
+    monkeypatch.setattr(ScoringModel, "encode", counting)
+    model = load_model(api_artifacts)
+    explain(model, ClientFeatures.model_validate(EXAMPLE_CLIENT))
+    assert len(calls) == 1

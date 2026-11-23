@@ -90,7 +90,7 @@ La réponse est celle de `/predict`, avec un champ `explanation` en plus :
 
 ```json
 "explanation": {
-  "base_value": -2.41,
+  "base_value": -0.59,
   "top": [
     {"feature": "CODE_GENDER", "value": "M", "contribution": 0.136,
      "sensitive": true, "derived": false},
@@ -102,7 +102,9 @@ La réponse est celle de `/predict`, avec un champ `explanation` en plus :
 ```
 
 - **Calcul** : TreeSHAP natif de LightGBM (`booster.predict(X, pred_contrib=True)`).
-  Le calcul est exact, prend environ 2 ms et n'ajoute aucune dépendance.
+  Le calcul est exact, n'ajoute aucune dépendance et coûte environ 1,6 ms de plus qu'un
+  `/predict` (médianes locales de `inference_ms` pour 100038 : 12,6 ms contre 14,2 ms). Le
+  client n'est encodé qu'une fois pour le score et les contributions.
 - **Unité : log-odds.** Voici comment l'explication reconstitue le score :
   `base_value + Σ top.contribution + others = logit(prob_default)`, où
   `logit(p) = ln(p / (1 − p))`. Pour le client 100038, l'écart est de 2·10⁻¹⁵.
