@@ -1,4 +1,4 @@
-"""Client HTTP interne : l'interface appelle la vraie route `/predict` de l'application.
+"""Client HTTP interne : l'interface appelle la vraie route `/predict/explain`.
 
 Transport ASGI, sans réseau : chaque score traverse la validation, le middleware de
 journalisation (source `ui-demo`, #16) et la route, comme un appel extérieur. La clé d'API
@@ -42,11 +42,9 @@ class ApiClient:
             details = response.text
         raise ApiError(response.status_code, details)
 
-    async def predict_demo(self, sk_id_curr: int) -> dict[str, Any]:
-        return await self._post(f"/predict/{sk_id_curr}")
-
-    async def predict(self, features: dict[str, Any]) -> dict[str, Any]:
-        return await self._post("/predict", features)
+    async def explain(self, features: dict[str, Any]) -> dict[str, Any]:
+        """Score et explication locale (`POST /predict/explain`)."""
+        return await self._post("/predict/explain", features)
 
 
 def internal_client(app: FastAPI) -> ApiClient:

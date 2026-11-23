@@ -1,8 +1,9 @@
 """Écran de démonstration : un client de démo, son score, et le contrat de l'API à l'œuvre.
 
 Les gestionnaires sont des fonctions de module (client et clients en premiers arguments),
-testables sans lancer Gradio. Chaque score passe par la vraie route `/predict` (client
-interne, `X-Client: ui-demo`) ; les valeurs de départ viennent de l'échantillon de démo.
+testables sans lancer Gradio. Chaque score passe par la vraie route `/predict/explain`
+(client interne, `X-Client: ui-demo`), qui renvoie aussi l'explication locale (#44) ; les
+valeurs de départ viennent de l'échantillon de démo.
 Adapté de l'interface de P5 : pas de connexion (Space de démonstration, clé côté serveur).
 
 Les événements sont en `api_visibility="private"` : endpoints non documentés (ni page
@@ -27,7 +28,7 @@ import gradio as gr
 from credit_scoring import __version__
 from credit_scoring.api.features_schema import GeneratedFeatures
 from credit_scoring.ui.client import ApiClient, ApiError
-from credit_scoring.ui.view import errors_markdown, result_html, warnings_rows
+from credit_scoring.ui.view import errors_markdown, explanation_html, result_html, warnings_rows
 
 TITLE = "Scoring crédit — Prêt à Dépenser"
 SELECT_PROMPT = "⚠️ Sélectionnez un client."
@@ -67,13 +68,24 @@ def _values(client: dict[str, Any]) -> list[Any]:
     return [client.get(f.name) for f in EDITABLE]
 
 
-def _outcome(prediction: dict[str, Any]) -> tuple[str, list[list[str]], str]:
-    return result_html(prediction), warnings_rows(prediction), ""
+Outcome = tuple[str, str, list[list[str]], str]  # résultat, graphique, avertissements, erreur
 
 
-def _failure(exc: Exception) -> tuple[str, list[list[str]], str]:
+def _outcome(prediction: dict[str, Any]) -> Outcome:
+    chart = explanation_html(prediction.get("explanation"))
+    return result_html(prediction), chart, warnings_rows(prediction), ""
+
+
+def _failure(exc: Exception) -> Outcome:
     message = errors_markdown(exc) if isinstance(exc, ApiError) else DOWN
-    return "", [], message
+    return "", "", [], message
+
+
+async def _explained(client: ApiClient, body: dict[str, Any]) -> Outcome:
+    try:
+        return _outcome(await client.explain(body))
+    except Exception as exc:  # erreur de l'API ou transport : affichée, jamais levée
+        return _failure(exc)
 
 
 def on_load(clients: dict[int, dict[str, Any]]) -> dict[str, Any]:
@@ -85,32 +97,24 @@ def on_load(clients: dict[int, dict[str, Any]]) -> dict[str, Any]:
 async def on_select(
     client: ApiClient, clients: dict[int, dict[str, Any]], sk_id_curr: int | None
 ) -> tuple[Any, ...]:
-    """Valeurs de départ du client, et son score par `POST /predict/{sk_id_curr}`."""
+    """Valeurs de départ du client, son score et son explication (`POST /predict/explain`)."""
     if sk_id_curr is None or int(sk_id_curr) not in clients:
-        return (*[gr.update() for _ in EDITABLE], "", [], SELECT_PROMPT)
+        return (*[gr.update() for _ in EDITABLE], "", "", [], SELECT_PROMPT)
     sk_id = int(sk_id_curr)
-    try:
-        outcome = _outcome(await client.predict_demo(sk_id))
-    except Exception as exc:  # erreur de l'API ou transport : affichée, jamais levée
-        outcome = _failure(exc)
-    return (*_values(clients[sk_id]), *outcome)
+    return (*_values(clients[sk_id]), *await _explained(client, clients[sk_id]))
 
 
 async def on_score(
     client: ApiClient, clients: dict[int, dict[str, Any]], sk_id_curr: int | None, *values: Any
 ) -> tuple[Any, ...]:
-    """Client complet + valeurs modifiées, envoyé à `POST /predict` (rien n'est bloqué ici)."""
+    """Client complet + valeurs modifiées, envoyé à `POST /predict/explain` (rien n'est bloqué)."""
     if sk_id_curr is None or int(sk_id_curr) not in clients:
-        return (*values, "", [], SELECT_PROMPT)
+        return (*values, "", "", [], SELECT_PROMPT)
     body = {
         **clients[int(sk_id_curr)],
         **{f.name: v for f, v in zip(EDITABLE, values, strict=True)},
     }
-    try:
-        outcome = _outcome(await client.predict(body))
-    except Exception as exc:
-        outcome = _failure(exc)
-    return (*values, *outcome)
+    return (*values, *await _explained(client, body))
 
 
 def on_reset(clients: dict[int, dict[str, Any]], sk_id_curr: int | None) -> tuple[Any, ...]:
@@ -148,6 +152,26 @@ CSS = """
 .fill.decision-accorde { background: #22c55e; }
 .fill.decision-refuse { background: #ef4444; }
 .result .threshold { position: absolute; top: -4px; width: 2px; height: 20px; background: #0f172a; }
+.explain { font-size: .88rem; }
+.explain-head { font-weight: 600; margin-bottom: 2px; }
+.explain-legend { color: #64748b; margin-top: 0; }
+.legend-refus { color: #b42318; } .legend-accord { color: #15803d; }
+.explain-row { display: grid; grid-template-columns: minmax(0, 1.3fr) 1fr 4.5em;
+  gap: 8px; align-items: center; padding: 3px 0; border-bottom: 1px solid #f1f5f9; }
+.explain-name { overflow-wrap: anywhere; }
+.explain-value { color: #64748b; margin-left: 6px; }
+.explain-track { position: relative; height: 10px; background: #f1f5f9; border-radius: 5px; }
+.explain-track::after { content: ""; position: absolute; left: 50%; top: -3px; width: 1px;
+  height: 16px; background: #94a3b8; }
+.explain-bar { position: absolute; top: 0; height: 100%; border-radius: 5px; }
+.explain-bar.push-refus { background: #ef4444; }
+.explain-bar.push-accord { background: #22c55e; }
+.explain-num { text-align: right; font-variant-numeric: tabular-nums; }
+.explain-others { color: #64748b; font-style: italic; }
+.badge-sensitive { display: inline-block; margin-left: 4px; padding: 0 6px; border-radius: 9px;
+  background: #fef3c7; color: #92400e; border: 1px solid #f59e0b; font-size: .75rem;
+  cursor: help; }
+.derived { margin-left: 4px; color: #64748b; font-size: .75rem; font-style: italic; }
 """
 FORCE_LIGHT = """
 () => {
@@ -202,6 +226,7 @@ def build_ui(
                 gr.Markdown("### Résultat")
                 error = gr.Markdown()
                 result = gr.HTML()
+                chart = gr.HTML()
                 warnings = gr.Dataframe(
                     headers=["Feature", "Valeur", "Bornes (train)", "Rang", "Part"],
                     column_widths=["26%", "18%", "30%", "13%", "13%"],
@@ -210,7 +235,7 @@ def build_ui(
                     wrap=True,
                 )
 
-        outputs = [*fields, result, warnings, error]
+        outputs = [*fields, result, chart, warnings, error]
 
         async def select(sk: int | None) -> tuple[Any, ...]:
             return await on_select(client, clients_provider(), sk)
