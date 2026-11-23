@@ -92,6 +92,30 @@ class PredictionResponse(BaseModel):
     )
 
 
+class Contribution(BaseModel):
+    """Contribution d'une feature au score de ce client, en log-odds (> 0 : vers le refus)."""
+
+    feature: str
+    value: float | str | None = Field(description="valeur reçue (null si absente)")
+    contribution: float = Field(description="contribution SHAP en log-odds")
+    sensitive: bool = Field(description="critère protégé (non-discrimination)")
+    derived: bool = Field(description="combinaison calculée par OpenFE (autoFE_*)")
+
+
+class Explanation(BaseModel):
+    """base_value + somme des contributions de top + others = logit(prob_default)."""
+
+    base_value: float = Field(description="score moyen du modèle, en log-odds")
+    top: list[Contribution] = Field(description="plus fortes contributions en valeur absolue")
+    others: float = Field(description="somme des contributions des autres features")
+
+
+class ExplainResponse(PredictionResponse):
+    """Prédiction et explication locale du score (contributions SHAP exactes)."""
+
+    explanation: Explanation
+
+
 class ErrorMessage(BaseModel):
     """Erreur simple (401, 404)."""
 

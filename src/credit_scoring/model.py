@@ -114,6 +114,23 @@ class ScoringModel:
                 columns.append(codes.astype("float64").to_numpy())
         return np.column_stack(columns)
 
+    def contributions(self, frame: pd.DataFrame) -> tuple[float, np.ndarray]:
+        """Contributions SHAP exactes (TreeSHAP natif) d'un client, en log-odds.
+
+        Renvoie (valeur de base, contributions dans l'ordre de `features.model_columns`) ;
+        base + somme des contributions = logit du score. Une seule ligne attendue.
+        """
+        _, base, contributions = self.explain_row(frame)
+        return base, contributions
+
+    def explain_row(self, frame: pd.DataFrame) -> tuple[float, float, np.ndarray]:
+        """(score, valeur de base, contributions) d'un client, encodé une seule fois."""
+        matrix = self.encode(frame)
+        proba = float(np.asarray(self.booster.predict(matrix), dtype="float64")[0])
+        raw = np.asarray(self.booster.predict(matrix, pred_contrib=True))
+        row = raw[0].astype("float64")
+        return proba, float(row[-1]), row[:-1]
+
     def predict(self, frame: pd.DataFrame) -> pd.DataFrame:
         """Score de défaut, décision (1 = refus) et seuil, comme le wrapper P6."""
         proba = np.asarray(self.booster.predict(self.encode(frame)), dtype="float64")

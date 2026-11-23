@@ -15,6 +15,7 @@ from credit_scoring import __version__
 from credit_scoring.monitoring import record
 
 DEMO_PATH = "/predict/{sk_id_curr}"
+EXPLAIN_PATH = "/predict/explain"
 _errors = logging.getLogger(__name__)
 
 
@@ -23,7 +24,7 @@ def logged_path(scope: Scope) -> str | None:
     if scope["type"] != "http" or scope["method"] != "POST":
         return None
     path = str(scope["path"]).rstrip("/")
-    if path == "/predict":
+    if path in ("/predict", EXPLAIN_PATH):
         return path
     if path.startswith("/predict/") and path.count("/") == 2:
         return DEMO_PATH

@@ -42,7 +42,13 @@ def run(coro: Any) -> Any:
 def split(out: tuple[Any, ...]) -> tuple[dict[str, Any], str, list[list[str]], str]:
     """(valeurs des champs, html du résultat, lignes d'avertissements, markdown d'erreur)."""
     n = len(ui.EDITABLE)
-    return dict(zip(NAMES, out[:n], strict=True)), out[n], out[n + 1], out[n + 2]
+    return dict(zip(NAMES, out[:n], strict=True)), out[n], out[n + 2], out[n + 3]
+
+
+def chart(out: tuple[Any, ...]) -> str:
+    """Html du graphique d'explication."""
+    chart_html: str = out[len(ui.EDITABLE) + 1]
+    return chart_html
 
 
 def test_champs_lisibles_et_typés() -> None:
@@ -62,8 +68,10 @@ def test_chargement_liste_triee(ctx: Ctx) -> None:
 
 def test_selection_score_immediat(ctx: Ctx) -> None:
     client, clients = ctx
-    values, result, warnings, error = split(run(ui.on_select(client, clients, DEMO_VALID_ID)))
+    out = run(ui.on_select(client, clients, DEMO_VALID_ID))
+    values, result, warnings, error = split(out)
     assert "decision-" in result
+    assert "explain-bar" in chart(out)
     assert error == ""
     assert values["AMT_CREDIT"] == clients[DEMO_VALID_ID]["AMT_CREDIT"]
     assert warnings == []
@@ -71,8 +79,10 @@ def test_selection_score_immediat(ctx: Ctx) -> None:
 
 def test_client_invalide_422_affiche(ctx: Ctx) -> None:
     client, clients = ctx
-    _, result, _, error = split(run(ui.on_select(client, clients, DEMO_INVALID_ID)))
+    out = run(ui.on_select(client, clients, DEMO_INVALID_ID))
+    _, result, _, error = split(out)
     assert result == ""
+    assert chart(out) == ""
     assert "422" in error
 
 
@@ -82,7 +92,7 @@ class Capture:
     def __init__(self) -> None:
         self.body: dict[str, Any] = {}
 
-    async def predict(self, features: dict[str, Any]) -> dict[str, Any]:
+    async def explain(self, features: dict[str, Any]) -> dict[str, Any]:
         self.body = features
         return {"prob_default": 0.1, "decision": "accordé", "threshold": 0.5, "warnings": []}
 
@@ -104,6 +114,7 @@ def test_modification_avertissement(ctx: Ctx) -> None:
     out = run(ui.on_score(client, clients, DEMO_VALID_ID, *values.values()))
     _, _, warnings, error = split(out)
     assert [w[0] for w in warnings] == ["AMT_CREDIT"]
+    assert "explain-bar" in chart(out)
     assert error == ""
 
 
@@ -126,14 +137,16 @@ def test_champ_vide_non_nullable_422(ctx: Ctx) -> None:
 
 
 class Down:
-    async def predict_demo(self, sk_id_curr: int) -> dict[str, Any]:
+    async def explain(self, features: dict[str, Any]) -> dict[str, Any]:
         raise httpx.ConnectError("injoignable")
 
 
 def test_panne_api(ctx: Ctx) -> None:
     _, clients = ctx
-    _, result, _, error = split(run(ui.on_select(Down(), clients, DEMO_VALID_ID)))  # type: ignore[arg-type]
+    out = run(ui.on_select(Down(), clients, DEMO_VALID_ID))  # type: ignore[arg-type]
+    _, result, _, error = split(out)
     assert result == ""
+    assert chart(out) == ""
     assert "API indisponible" in error
 
 

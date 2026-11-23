@@ -9,8 +9,16 @@ from typing import Any
 
 import pandas as pd
 
+from credit_scoring.api.fairness import DERIVED_PREFIX, SENSITIVE_FEATURES
 from credit_scoring.api.features_schema import FEATURE_ORDER
-from credit_scoring.api.schemas import ClientFeatures, FeatureWarning, PredictionResponse
+from credit_scoring.api.schemas import (
+    ClientFeatures,
+    Contribution,
+    ExplainResponse,
+    Explanation,
+    FeatureWarning,
+    PredictionResponse,
+)
 from credit_scoring.model import ScoringModel
 
 SAMPLE_FILE = "sample_clients.csv"
@@ -65,13 +73,56 @@ def score(
     row = model.predict(frame).iloc[0]
     if timings is not None:
         timings["inference_ms"] = (time.perf_counter() - start) * 1000
+    return _response(model, values, float(row["prob_default"]), sk_id_curr)
+
+
+def _response(
+    model: ScoringModel, values: dict[str, Any], prob: float, sk_id_curr: int | None
+) -> PredictionResponse:
     return PredictionResponse(
         sk_id_curr=sk_id_curr,
-        prob_default=float(row["prob_default"]),
-        decision="refusé" if int(row["decision"]) == 1 else "accordé",
+        prob_default=prob,
+        decision="refusé" if prob >= model.threshold else "accordé",
         threshold=model.threshold,
         model_version=model.version,
         warnings=out_of_bounds(values, model.features.numeric_bounds, model.importance),
+    )
+
+
+def explain(
+    model: ScoringModel,
+    client: ClientFeatures,
+    top_n: int = 10,
+    timings: dict[str, float] | None = None,
+) -> ExplainResponse:
+    """Prédiction + contributions SHAP ; `timings["inference_ms"]` = encodage, score et
+    contributions (client encodé une seule fois)."""
+    values = client.model_dump()
+    frame = pd.DataFrame([values], columns=list(FEATURE_ORDER))
+    start = time.perf_counter()
+    prob, base, contributions = model.explain_row(frame)
+    if timings is not None:
+        timings["inference_ms"] = (time.perf_counter() - start) * 1000
+    prediction = _response(model, values, prob, None)
+    ranked = sorted(
+        zip(model.features.model_columns, contributions.tolist(), strict=True),
+        key=lambda item: abs(item[1]),
+        reverse=True,
+    )
+    top = [
+        Contribution(
+            feature=name,
+            value=values.get(name),
+            contribution=value,
+            sensitive=name in SENSITIVE_FEATURES,
+            derived=name.startswith(DERIVED_PREFIX),
+        )
+        for name, value in ranked[:top_n]
+    ]
+    others = float(sum(value for _, value in ranked[top_n:]))
+    return ExplainResponse(
+        **prediction.model_dump(),
+        explanation=Explanation(base_value=base, top=top, others=others),
     )
 
 

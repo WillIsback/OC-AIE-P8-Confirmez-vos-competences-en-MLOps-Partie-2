@@ -9,6 +9,7 @@ dans `docs/spec.md`. Documentation interactive : `/docs` (Swagger, avec exemples
 |---|---|---|
 | `GET /health` | non | vivacité, version déployée, état de la journalisation (`logging.database`, `logging.dropped`) |
 | `POST /predict` | oui | score d'un client décrit par ses 122 features |
+| `POST /predict/explain` | oui | même entrée et même validation que `/predict`, plus l'**explication locale** du score (#44) |
 | `POST /predict/{sk_id_curr}` | oui | démo : client de l'échantillon (1 000 clients du test), **même validation** |
 | `GET /docs`, `/openapi.json` | non | documentation |
 | `GET /` | non | interface de démonstration Gradio (Space, extra `ui`) ; page HTML sinon — `docs/ui/README.md` |
@@ -83,6 +84,42 @@ données.
 **Ordre des contrôles** : clé d'API (401) avant la validation (422) — un appelant non
 authentifié n'apprend rien du contrat.
 
+## Explication locale : `POST /predict/explain` (#44)
+
+La réponse est celle de `/predict`, avec un champ `explanation` en plus :
+
+```json
+"explanation": {
+  "base_value": -0.59,
+  "top": [
+    {"feature": "CODE_GENDER", "value": "M", "contribution": 0.136,
+     "sensitive": true, "derived": false},
+    {"feature": "autoFE_f_131", "value": 0.0426, "contribution": -0.087,
+     "sensitive": false, "derived": true}
+  ],
+  "others": 0.535
+}
+```
+
+- **Calcul** : TreeSHAP natif de LightGBM (`booster.predict(X, pred_contrib=True)`).
+  Le calcul est exact, n'ajoute aucune dépendance et coûte environ 1,6 ms de plus qu'un
+  `/predict` (médianes locales de `inference_ms` pour 100038 : 12,6 ms contre 14,2 ms). Le
+  client n'est encodé qu'une fois pour le score et les contributions.
+- **Unité : log-odds.** Voici comment l'explication reconstitue le score :
+  `base_value + Σ top.contribution + others = logit(prob_default)`, où
+  `logit(p) = ln(p / (1 − p))`. Pour le client 100038, l'écart est de 2·10⁻¹⁵.
+- **Lecture** :
+  - une contribution > 0 pousse vers le refus, < 0 vers l'accord ;
+  - `top` contient les 10 contributions les plus fortes en valeur absolue ;
+  - `others` est la somme des 112 autres.
+- **`sensitive`** : la feature est un critère protégé (politique déclarée dans
+  `api/fairness.py`, ADR-007). Seul `CODE_GENDER` l'est.
+- **`derived`** : la feature est une combinaison calculée par OpenFE (`autoFE_*`), sans sens
+  métier direct. Elles représentent 79 features sur 122.
+- **Coût** : il n'est payé qu'à la demande, et le contrat de `/predict` reste inchangé.
+  La route est journalisée sous son propre chemin (`path = "/predict/explain"`), avec
+  `inference_ms` = score + contributions.
+
 ## Où est le code
 
 - `src/credit_scoring/api/features_schema.py` : types des 122 features, **généré** par
@@ -90,6 +127,8 @@ authentifié n'apprend rien du contrat.
   un client synthétique (médianes du train), aucune ligne des données Kaggle n'est versionnée ;
 - `src/credit_scoring/api/schemas.py` : règles métier, écrites à la main ;
 - `src/credit_scoring/api/security.py` : clé comparée en temps constant ;
+- `src/credit_scoring/api/fairness.py` : attributs protégés signalés par l'explication ;
+- `src/credit_scoring/api/scoring.py` : `score` et `explain` (contributions SHAP) ;
 - `src/credit_scoring/api/app.py` : routes, `lifespan` (clé, modèle chargé une fois, clients
   de démo ; le service refuse de démarrer s'il manque l'un d'eux), 422 compact.
 

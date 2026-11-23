@@ -6,7 +6,10 @@ import pytest
 
 from credit_scoring.ui.client import ApiError
 from credit_scoring.ui.view import (
+    BADGE_LABEL,
+    DERIVED_LABEL,
     errors_markdown,
+    explanation_html,
     fmt_number,
     fmt_percent,
     result_html,
@@ -117,3 +120,82 @@ def test_valeur_recue_vide() -> None:
     )
     assert "(reçu : vide)" in errors_markdown(err)
     assert "None" not in errors_markdown(err)
+
+
+EXPLANATION = {
+    "base_value": -2.3,
+    "top": [
+        {
+            "feature": "CODE_GENDER",
+            "value": "M",
+            "contribution": 0.136,
+            "sensitive": True,
+            "derived": False,
+        },
+        {
+            "feature": "autoFE_f_131",
+            "value": 0.0426,
+            "contribution": -0.087,
+            "sensitive": False,
+            "derived": True,
+        },
+        {
+            "feature": "OWN_CAR_AGE",
+            "value": None,
+            "contribution": 0.01,
+            "sensitive": False,
+            "derived": False,
+        },
+    ],
+    "others": -0.25,
+}
+
+
+def test_explication_une_barre_par_contribution() -> None:
+    html = explanation_html(EXPLANATION)
+    assert html.count('class="explain-bar') == 3
+    assert html.count("push-refus") == 2
+    assert html.count("push-accord") == 1
+    assert "autres features" in html
+    assert "\N{MINUS SIGN}0,25" in html
+
+
+def test_explication_badge_critere_protege() -> None:
+    html = explanation_html(EXPLANATION)
+    assert BADGE_LABEL == "critère protégé (non-discrimination)"
+    assert html.count(BADGE_LABEL) == 1
+    assert 'title="sexe : critère protégé' in html  # info-bulle : la justification
+
+
+def test_explication_combinaison_calculee() -> None:
+    html = explanation_html(EXPLANATION)
+    assert DERIVED_LABEL == "combinaison calculée"
+    assert html.count(DERIVED_LABEL) == 1
+
+
+def test_explication_plus_forte_barre_pleine_demi_largeur() -> None:
+    html = explanation_html(EXPLANATION)
+    assert "width:50.0%" in html  # |0,136| = maximum → demi-piste
+
+
+def test_explication_valeurs_echappees() -> None:
+    hostile = {
+        "base_value": 0.0,
+        "top": [
+            {
+                "feature": "<b>x</b>",
+                "value": "<script>",
+                "contribution": 0.1,
+                "sensitive": False,
+                "derived": False,
+            }
+        ],
+        "others": 0.0,
+    }
+    html = explanation_html(hostile)
+    assert "<script>" not in html and "<b>x</b>" not in html
+    assert "&lt;script&gt;" in html
+
+
+def test_explication_absente() -> None:
+    assert explanation_html(None) == ""

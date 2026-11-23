@@ -14,8 +14,13 @@ from pydantic import ValidationError
 
 from credit_scoring import __version__
 from credit_scoring.api.features_schema import EXAMPLE_CLIENT
-from credit_scoring.api.schemas import ClientFeatures, ErrorMessage, PredictionResponse
-from credit_scoring.api.scoring import load_demo_clients, score
+from credit_scoring.api.schemas import (
+    ClientFeatures,
+    ErrorMessage,
+    ExplainResponse,
+    PredictionResponse,
+)
+from credit_scoring.api.scoring import explain, load_demo_clients, score
 from credit_scoring.api.security import configured_api_key, require_api_key
 from credit_scoring.hub import ensure_artifacts
 from credit_scoring.model import ScoringModel, get_model, model_dir
@@ -170,6 +175,32 @@ def predict(
 ) -> PredictionResponse:
     """Score de défaut et décision pour un client décrit par ses 122 features."""
     return _scored(request, model, client)
+
+
+@app.post(
+    "/predict/explain",
+    tags=["scoring"],
+    response_model=ExplainResponse,
+    dependencies=[Depends(require_api_key)],
+    responses=ERRORS_401,
+)
+def predict_explain(
+    client: Annotated[ClientFeatures, Body(openapi_examples=PREDICT_EXAMPLES)],
+    model: ModelDep,
+    request: Request,
+) -> ExplainResponse:
+    """Comme `/predict`, plus l'explication locale : contributions SHAP exactes (log-odds).
+
+    `base_value + Σ top.contribution + others = logit(prob_default)`. Une contribution
+    positive pousse vers le refus. `sensitive` signale un critère protégé, `derived` une
+    combinaison calculée (OpenFE). Déclarée avant `/predict/{sk_id_curr}`.
+    """
+    timings: dict[str, float] = {}
+    request.state.features = client.model_dump()
+    result = explain(model, client, timings=timings)
+    request.state.prediction = result
+    request.state.inference_ms = timings.get("inference_ms")
+    return result
 
 
 @app.post(

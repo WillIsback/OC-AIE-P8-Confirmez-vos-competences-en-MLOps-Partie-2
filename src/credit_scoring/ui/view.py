@@ -5,12 +5,16 @@ from __future__ import annotations
 from html import escape
 from typing import Any
 
+from credit_scoring.api.fairness import SENSITIVE_FEATURES
 from credit_scoring.api.features_schema import FEATURE_ORDER
 from credit_scoring.ui.client import ApiError
 
 NNBSP = "\N{NARROW NO-BREAK SPACE}"  # espace fine insécable : séparateur de milliers et avant « % »
 DASH = "\N{EN DASH}"
 N_FEATURES = len(FEATURE_ORDER)
+MINUS = "\N{MINUS SIGN}"
+BADGE_LABEL = "critère protégé (non-discrimination)"
+DERIVED_LABEL = "combinaison calculée"
 
 
 def fmt_number(value: float | int | None) -> str:
@@ -70,3 +74,60 @@ def errors_markdown(err: ApiError) -> str:
         received = "" if "input" not in e else f" (reçu : {'vide' if value is None else value})"
         lines.append(f"- **{field}** : {e.get('msg', '')}{received}")
     return "**Refusé par l'API (422)**\n\n" + "\n".join(lines)
+
+
+def _signed(value: float) -> str:
+    text = fmt_number(round(abs(value), 3))
+    return f"{MINUS}{text}" if value < 0 else f"+{text}"
+
+
+def _shown(value: float | str | None) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return escape(value)
+    return fmt_number(value)
+
+
+def _bar(contribution: float, scale: float) -> str:
+    """Barre centrée sur zéro : à droite (rouge) vers le refus, à gauche (vert) vers l'accord."""
+    width = abs(contribution) / scale * 50 if scale else 0.0
+    css, left = ("push-refus", 50.0) if contribution > 0 else ("push-accord", 50.0 - width)
+    return (
+        f'<div class="explain-track"><div class="explain-bar {css}" '
+        f'style="left:{left:.1f}%;width:{width:.1f}%"></div></div>'
+    )
+
+
+def explanation_html(explanation: dict[str, Any] | None) -> str:
+    """Graphique des contributions SHAP du client : barres, badge, mention des autoFE."""
+    if not explanation:
+        return ""
+    top = explanation["top"]
+    others = float(explanation["others"])
+    scale = max((abs(c["contribution"]) for c in top), default=0.0)
+    rows = []
+    for c in top:
+        name = escape(c["feature"])
+        tags = ""
+        if c.get("sensitive"):
+            reason = escape(SENSITIVE_FEATURES.get(c["feature"], BADGE_LABEL))
+            tags += f' <span class="badge-sensitive" title="{reason}">{BADGE_LABEL}</span>'
+        if c.get("derived"):
+            tags += f' <span class="derived">{DERIVED_LABEL}</span>'
+        rows.append(
+            f'<div class="explain-row"><div class="explain-name"><code>{name}</code>{tags}'
+            f'<span class="explain-value">{_shown(c.get("value"))}</span></div>'
+            f"{_bar(float(c['contribution']), scale)}"
+            f'<span class="explain-num">{_signed(float(c["contribution"]))}</span></div>'
+        )
+    rows.append(
+        '<div class="explain-row explain-others"><div class="explain-name">autres features</div>'
+        f'<div class="explain-track"></div><span class="explain-num">{_signed(others)}</span></div>'
+    )
+    return (
+        '<div class="explain"><p class="explain-head">Ce qui a pesé pour ce client '
+        "(contributions SHAP, en log-odds)</p>"
+        '<p class="explain-legend"><span class="legend-refus">▶ vers le refus</span> · '
+        '<span class="legend-accord">◀ vers l\'accord</span></p>' + "".join(rows) + "</div>"
+    )
